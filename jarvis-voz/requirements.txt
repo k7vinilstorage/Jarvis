@@ -1,0 +1,8 @@
+# Protocolo Wyoming (o mesmo dos contêineres rhasspy/wyoming-whisper e wyoming-piper)
+wyoming==1.10.2
+# Servidor web com WebSocket
+starlette==1.7.0
+uvicorn==0.53.0
+websockets==17.1
+# Fusos horários para o zoneinfo (a imagem slim não traz o tzdata do sistema)
+tzdata==2026.4

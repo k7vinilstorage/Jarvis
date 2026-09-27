@@ -1,0 +1,14 @@
+# Jarvis: liga o jarvis-tools à rede do seu SearXNG, para a busca na web.
+# O scripts/fase1-jarvis-tools.sh descobre a rede, grava SEARXNG_REDE e SEARXNG_URL no .env e acrescenta
+# este arquivo ao COMPOSE_FILE. Sem SearXNG, este arquivo fica de fora e a busca simplesmente não aparece.
+
+services:
+  jarvis-tools:
+    networks:
+      - default
+      - searxng
+
+networks:
+  searxng:
+    external: true
+    name: ${SEARXNG_REDE:?defina SEARXNG_REDE no .env (o scripts/fase1-jarvis-tools.sh descobre)}

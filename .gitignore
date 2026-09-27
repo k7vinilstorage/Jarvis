@@ -1,0 +1,11 @@
+.env
+data/
+honcho/honcho.env
+honcho-src/
+medicoes/
+__pycache__/
+*.pyc
+.ruff_cache/
+.venv/
+venv/
+esp32/**/segredos.h

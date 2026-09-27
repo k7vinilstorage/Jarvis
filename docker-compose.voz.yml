@@ -1,0 +1,49 @@
+# Jarvis: ponte de voz (Fase 2). Entra pelo COMPOSE_FILE no .env: ...:docker-compose.voz.yml
+#
+#   jarvis-voz   o PC ou o ESP32 fala por WebSocket (porta 10800); a ponte passa pelo Whisper, pelo Hermes e
+#                pelo Piper e devolve a resposta falada, frase a frase. Sempre com token (JARVIS_VOZ_TOKEN).
+
+services:
+  jarvis-voz:
+    build: ./jarvis-voz
+    image: jarvis-voz:local
+    container_name: jarvis-voz
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      JARVIS_VOZ_TOKEN: ${JARVIS_VOZ_TOKEN:?defina JARVIS_VOZ_TOKEN no .env (o scripts/fase2-voz.sh gera)}
+      HERMES_URL: http://hermes:8642
+      HERMES_API_KEY: ${HERMES_API_KEY:?defina HERMES_API_KEY no .env}
+      WHISPER_URI: tcp://whisper:10300
+      PIPER_URI: tcp://piper:10200
+      PIPER_VOICE: ${PIPER_VOICE:-pt_BR-faber-medium}
+    ports:
+      # Aberta na rede de casa para o PC e o ESP32. NUNCA redirecione esta porta no roteador.
+      # JARVIS_VOZ_IP = o IP do servidor na rede de casa: a porta só escuta nessa placa de rede
+      # (o Docker passa por fora do ufw, então é aqui que se limita)
+      - "${JARVIS_VOZ_IP:-0.0.0.0}:${JARVIS_VOZ_PORTA:-10800}:10800"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      hermes:
+        condition: service_started
+      whisper:
+        condition: service_started
+      piper:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10800/saude', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

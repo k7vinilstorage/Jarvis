@@ -1,0 +1,117 @@
+# Jarvis: Honcho (memória de longo prazo), complemento opcional do docker-compose.yml.
+# Para ativar, descomente COMPOSE_FILE no .env. Guia: docs/honcho.md
+#
+#   honcho-db        Postgres com pgvector (fatos, sessões, embeddings)
+#   honcho-redis     cache
+#   honcho-migrate   tarefa única: cria as tabelas e ajusta o tamanho dos vetores
+#   honcho-api       API do Honcho, só na rede interna (http://honcho-api:8000)
+#   honcho-deriver   trabalhador em segundo plano que extrai fatos das conversas
+#
+# O Honcho é compilado a partir do código-fonte em ./honcho-src (versão HONCHO_VERSION).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-honcho-build: &honcho-build
+  context: ./honcho-src
+  dockerfile: Dockerfile
+
+x-honcho-env: &honcho-env
+  DB_CONNECTION_URI: postgresql+psycopg://honcho:${HONCHO_DB_PASSWORD:?defina HONCHO_DB_PASSWORD no .env}@honcho-db:5432/honcho
+  CACHE_URL: redis://honcho-redis:6379/0?suppress=true
+
+services:
+  # Acrescenta ao ollama-init a criação do modelo de embeddings (na CPU)
+  ollama-init:
+    environment:
+      EMBED_BASE_MODEL: ${HONCHO_EMBED_BASE:-bge-m3}
+      EMBED_MODEL: jarvis-embed
+
+  honcho-db:
+    image: pgvector/pgvector:pg15
+    container_name: jarvis-honcho-db
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_DB: honcho
+      POSTGRES_USER: honcho
+      POSTGRES_PASSWORD: ${HONCHO_DB_PASSWORD:?defina HONCHO_DB_PASSWORD no .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./honcho-src/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - honcho-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U honcho -d honcho"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  honcho-redis:
+    image: redis:8.2
+    container_name: jarvis-honcho-redis
+    restart: unless-stopped
+    volumes:
+      - honcho-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  honcho-migrate:
+    build: *honcho-build
+    image: jarvis-honcho:${HONCHO_VERSION:-v3.2.1}
+    container_name: jarvis-honcho-migrate
+    restart: "no"
+    entrypoint: ["sh", "-c", "python scripts/provision_db.py && python scripts/configure_embeddings.py --yes"]
+    env_file: ./honcho/honcho.env
+    environment: *honcho-env
+    depends_on:
+      honcho-db:
+        condition: service_healthy
+    logging: *logging
+
+  honcho-api:
+    build: *honcho-build
+    image: jarvis-honcho:${HONCHO_VERSION:-v3.2.1}
+    container_name: jarvis-honcho-api
+    restart: unless-stopped
+    entrypoint: ["sh", "docker/entrypoint.sh"]
+    env_file: ./honcho/honcho.env
+    environment: *honcho-env
+    depends_on:
+      honcho-migrate:
+        condition: service_completed_successfully
+      honcho-redis:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully   # garante que o jarvis-embed já existe
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *logging
+
+  honcho-deriver:
+    build: *honcho-build
+    image: jarvis-honcho:${HONCHO_VERSION:-v3.2.1}
+    container_name: jarvis-honcho-deriver
+    restart: unless-stopped
+    entrypoint: ["/app/.venv/bin/python", "-m", "src.deriver"]
+    env_file: ./honcho/honcho.env
+    environment: *honcho-env
+    depends_on:
+      honcho-api:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  honcho-db:
+  honcho-redis:

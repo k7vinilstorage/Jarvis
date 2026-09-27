@@ -1,0 +1,7 @@
+# Mesma versão do SDK MCP que o Hermes v0.21.5 usa como cliente
+mcp==2.0.0
+mcp-types==2.0.0
+starlette==1.7.0
+uvicorn==0.53.0
+# Fusos horários para o zoneinfo (a imagem slim não traz o tzdata do sistema)
+tzdata==2026.4

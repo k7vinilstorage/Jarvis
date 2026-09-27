@@ -1,0 +1,150 @@
+# Jarvis: infraestrutura base (Fase 0)
+#
+#   ollama        LLM na GPU (substitui o contêiner "ollama" atual, mantendo os modelos)
+#   ollama-init   tarefa única: baixa o qwen3.5:4b e cria a variante do Jarvis com contexto de 64K
+#   hermes        o agente (API na 8642, painel na 9119)
+#   whisper       fala -> texto, em português (CPU)
+#   piper         texto -> fala, voz pt_BR (CPU)
+#   openwakeword  detecção de "hey jarvis" (CPU)
+#
+# A bridge de voz (Fase 2) entra neste mesmo arquivo depois.
+# Guia passo a passo: docs/fase0.md
+
+name: jarvis
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"                  # igual ao atual, para a Open WebUI continuar funcionando
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: "-1"          # nunca descarrega o modelo por inatividade
+      OLLAMA_NUM_PARALLEL: "1"         # uma requisição por vez: não multiplica o contexto na VRAM
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0       # cache de contexto em 8 bits: metade da VRAM
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *logging
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: jarvis-ollama-init
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      BASE_MODEL: ${BASE_MODEL:-qwen3.5:4b}
+      JARVIS_MODEL: ${JARVIS_MODEL:-jarvis-qwen}
+      JARVIS_NUM_CTX: ${JARVIS_NUM_CTX:-65536}
+      JARVIS_NUM_GPU: ${JARVIS_NUM_GPU:-}
+      # Sem a variável no .env vale o valor daqui; com a variável vazia, vale o padrão do modelo
+      JARVIS_TEMPERATURE: ${JARVIS_TEMPERATURE-0.5}
+      JARVIS_TOP_P: ${JARVIS_TOP_P-0.9}
+      JARVIS_TOP_K: ${JARVIS_TOP_K-20}
+      JARVIS_PRESENCE_PENALTY: ${JARVIS_PRESENCE_PENALTY-0.3}
+    volumes:
+      - ./ollama:/init:ro
+    logging: *logging
+
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    command: gateway run
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8642:8642"          # API: só no próprio servidor (a bridge usará a rede interna)
+      - "9119:9119"                    # painel web na rede local, com usuário e senha
+    volumes:
+      - ./data/hermes:/opt/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      HERMES_TIMEZONE: ${TZ:-America/Sao_Paulo}
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${HERMES_API_KEY:?defina HERMES_API_KEY no .env}
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${DASHBOARD_USER:-admin}
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${DASHBOARD_PASSWORD:?defina DASHBOARD_PASSWORD no .env}
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${DASHBOARD_SECRET:?defina DASHBOARD_SECRET no .env}
+    # SearXNG (opcional, ver docs/fase0.md): descomente as 3 linhas abaixo
+    # networks:
+    #   - default
+    #   - searxng
+    logging: *logging
+
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: jarvis-whisper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10300:10300"
+    volumes:
+      - ./data/whisper:/data
+    environment:
+      WYO_WHISPER_MODEL: ${WHISPER_MODEL:-small-int8}
+      WYO_WHISPER_LANGUAGE: pt
+      WYO_WHISPER_VAD_ENDPOINTING: "0.8"   # encerra a frase após 0,8 s de silêncio
+    logging: *logging
+
+  piper:
+    image: rhasspy/wyoming-piper:latest
+    container_name: jarvis-piper
+    restart: unless-stopped
+    command: --voice ${PIPER_VOICE:-pt_BR-faber-medium}
+    ports:
+      - "127.0.0.1:10200:10200"
+    volumes:
+      - ./data/piper:/data
+    logging: *logging
+
+  openwakeword:
+    image: rhasspy/wyoming-openwakeword:latest
+    container_name: jarvis-openwakeword
+    restart: unless-stopped
+    command: --custom-model-dir /custom    # "hey_jarvis" já vem embutido; aqui entram modelos próprios
+    ports:
+      - "127.0.0.1:10400:10400"
+    volumes:
+      - ./data/wakeword:/custom
+    logging: *logging
+
+volumes:
+  ollama-models:
+    external: true                     # o volume do seu Ollama atual (ver passo 3 do guia)
+    name: ${OLLAMA_VOLUME:-ollama}
+
+# SearXNG (opcional): descomente e troque o nome pela rede do seu contêiner searxng
+# networks:
+#   searxng:
+#     external: true
+#     name: open-web-ui_default

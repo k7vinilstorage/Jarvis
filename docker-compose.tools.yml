@@ -1,0 +1,53 @@
+# Jarvis: ferramentas próprias (servidor MCP), complemento do docker-compose.yml.
+# Entra pelo COMPOSE_FILE no .env (o scripts/fase1-jarvis-tools.sh ajusta). Guia: docs/fase1.md
+#
+#   jarvis-tools   hora, clima, Moodle, Google Agenda, Gmail e busca na web.
+#                  Só na rede interna (http://jarvis-tools:8000/mcp) e com token.
+#                  Moodle, Google e busca só aparecem para o Jarvis depois de configurados.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  jarvis-tools:
+    build: ./jarvis-tools
+    image: jarvis-tools:local
+    container_name: jarvis-tools
+    restart: unless-stopped
+    # Roda com o seu usuário: os tokens em data/jarvis-tools ficam seus, com permissão 0600
+    user: "${HERMES_UID:-1000}:${HERMES_GID:-1000}"
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      JARVIS_TOOLS_TOKEN: ${JARVIS_TOOLS_TOKEN:?defina JARVIS_TOOLS_TOKEN no .env (o scripts/fase1-jarvis-tools.sh gera)}
+      JARVIS_CIDADE: ${JARVIS_CIDADE:-Cornélio Procópio, PR}
+      DADOS: /data
+      MOODLE_URL: ${MOODLE_URL:-}
+      SEARXNG_URL: ${SEARXNG_URL:-}
+      GOOGLE_CONTA_PADRAO: ${GOOGLE_CONTA_PADRAO:-}
+    volumes:
+      # Token do Moodle (moodle.json) e contas Google (google/*.json). Nada disso vai para o Hermes.
+      - ./data/jarvis-tools:/data
+    # Sem portas publicadas: só o Hermes, na rede interna, fala com ele
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *logging
+
+  # O Hermes só sobe depois das ferramentas, para já conectar na primeira tentativa
+  hermes:
+    depends_on:
+      jarvis-tools:
+        condition: service_healthy
