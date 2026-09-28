@@ -48,7 +48,7 @@ class TesteRegistro(unittest.TestCase):
         ferramentas_mcp = {f.name: f for f in asyncio.run(s.list_tools())}
         self.assertEqual(list(ferramentas_mcp), TODAS)
         criar = ferramentas_mcp["agenda_criar"]
-        self.assertIn("Só use depois que o usuário confirmar", criar.description)
+        self.assertIn("em dois passos: a 1ª chamada não cria nada", criar.description)
         self.assertIn("Contas: faculdade, pessoal.", criar.description)
         self.assertFalse(criar.annotations.read_only_hint)
         self.assertFalse(criar.annotations.destructive_hint)
