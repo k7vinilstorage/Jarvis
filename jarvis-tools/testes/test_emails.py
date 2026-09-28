@@ -257,10 +257,10 @@ class TesteLerEmail(BaseEmails):
         for inventado in ("[3805]", "3805"):
             texto = self.abrir(inventado)
             self.assertTrue(texto.startswith("Não achei o e-mail"), texto)
-            self.assertIn("chame ler_email com eles", texto)
+            self.assertIn("chame ler_email com o nome", texto)
         self.assertEqual(self.detalhes(), [])  # nem buscou nem abriu nada
         # Com formato de id (13 dígitos, como o de 23h52), tenta abrir, não acha e manda procurar pelo assunto
-        self.assertIn("chame ler_email com eles", self.abrir("[1738803856811]"))
+        self.assertIn("chame ler_email com o nome", self.abrir("[1738803856811]"))
         self.assertTrue(self.abrir("Banco Tal").startswith("E-mail da conta pessoal"))  # busca por texto continua
 
     def test_por_id_sem_rotulo_procura_nas_contas(self):
@@ -269,7 +269,7 @@ class TesteLerEmail(BaseEmails):
         self.assertEqual(len(self.detalhes()), 2)  # faculdade respondeu 404, pessoal achou
         self.assertEqual(self.abrir("id: 18f2a3b4c5d6e7f8"), texto)
         self.assertIn("Não achei o e-mail 0000aaaa1111bbbb em nenhuma conta. Se você já disse ao usuário o remetente ou "
-                      "o assunto, chame ler_email com eles",
+                      "o assunto, chame ler_email com o nome",
                       self.abrir("0000aaaa1111bbbb"))
         self.assertIn("Não achei o e-mail 0000aaaa1111bbbb na conta pessoal",
                       self.abrir("pessoal/0000aaaa1111bbbb"))

@@ -538,5 +538,6 @@ async def ler_email(email: str, conta: str = "", agora: datetime | None = None) 
 
 def _nao_achei(ident: str, onde: str) -> str:
     # O id de uma resposta anterior não fica na conversa: o modelo inventava um. Procurar pelo assunto resolve.
-    return ("Não achei o e-mail %s %s. Se você já disse ao usuário o remetente ou o assunto, chame ler_email com eles "
-            "(ex.: AliExpress itens sem taxa), sem id." % (ident, onde))
+    # Sem exemplo concreto: o modelo copia o exemplo ao pé da letra (já copiou um id e um assunto de exemplo)
+    return ("Não achei o e-mail %s %s. Se você já disse ao usuário o remetente ou o assunto, chame ler_email com o nome "
+            "do remetente e palavras do assunto que você disse, sem id." % (ident, onde))
