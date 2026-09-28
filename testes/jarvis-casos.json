@@ -774,18 +774,18 @@
             "nao (consegui|foi possivel)|erro|falhou"
           ],
           "max_chamadas": null,
-          "pausa_antes": 6
+          "pausa_antes": 12
         }
       ],
       "altera": true,
-      "nota": "Cria um evento de verdade na sua agenda: depois do teste, apague o evento \"dentista\" de sexta-feira às 15h. O turno 1 pergunta (pode chamar agenda_criar, que só guarda o pedido e devolve a data para confirmar); o turno 2 vem 6 s depois, como se fosse você respondendo, e aí o evento é criado."
+      "nota": "Cria um evento de verdade na sua agenda: depois do teste, apague o evento \"dentista\" de sexta-feira às 15h. O turno 1 pergunta (pode chamar agenda_criar, que só guarda o pedido e devolve a data para confirmar); o turno 2 vem 12 s depois, como se fosse você respondendo, e aí o evento é criado."
     },
     {
       "id": "agenda-recorrente",
       "categoria": "agenda",
       "requer": "google",
       "altera": true,
-      "nota": "Cria de verdade uma série \"Teste do Jarvis\" (quartas às 7h, até 25/11), muda a hora de todas e apaga todas. Se o caso parar no meio, apague a série \"Teste do Jarvis\" no Google Agenda. Cada mudança pede confirmação; as respostas \"sim\" vêm 6 s depois, como se fosse você.",
+      "nota": "Cria de verdade uma série \"Teste do Jarvis\" (quartas às 7h, até 25/11), muda a hora de todas e apaga todas. Se o caso parar no meio, apague a série \"Teste do Jarvis\" no Google Agenda. Cada mudança pede confirmação; as respostas \"sim\" vêm 12 s depois, como se fosse você.",
       "turnos": [
         {
           "pergunta": "Marque Teste do Jarvis toda quarta às 7h até 25 de novembro.",
@@ -817,7 +817,7 @@
           "verificar": null,
           "max_primeira_palavra": null,
           "max_chamadas": null,
-          "pausa_antes": 6
+          "pausa_antes": 12
         },
         {
           "pergunta": "Mude o Teste do Jarvis para as 8h, em todas as ocorrências.",
@@ -849,7 +849,7 @@
           "verificar": null,
           "max_primeira_palavra": null,
           "max_chamadas": null,
-          "pausa_antes": 6
+          "pausa_antes": 12
         },
         {
           "pergunta": "Apague todas as ocorrências do Teste do Jarvis.",
@@ -880,7 +880,7 @@
           "verificar": null,
           "max_primeira_palavra": null,
           "max_chamadas": null,
-          "pausa_antes": 6
+          "pausa_antes": 12
         }
       ]
     },

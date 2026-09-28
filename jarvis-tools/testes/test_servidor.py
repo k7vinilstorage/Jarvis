@@ -108,7 +108,7 @@ class TesteCli(unittest.TestCase):
             self.assertEqual((codigo, json.loads(saida)), (0, {"moodle": False, "google": [], "busca": False}))
             codigo, saida, _ = self.rodar()
             self.assertIn("agenda_criar(titulo: str, data: str, hora: str = '', duracao_minutos: int = 60, "
-                          "conta: str = '', repetir: str = '')", saida)
+                          "conta: str = '', repetir: str = '', resposta_do_usuario: str = '')", saida)
             self.assertIn("[não configurada", saida)
             codigo, saida, _ = self.rodar("moodle_prazos", "semana")
             self.assertIn("O Moodle não está configurado", saida)

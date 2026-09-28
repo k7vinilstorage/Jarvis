@@ -158,27 +158,42 @@ class TesteCriacao(BaseAgenda):
         return asyncio.run(agenda.criar(*args, agora=AGORA, **kwargs))
 
     def criar(self, *args, **kwargs):
-        """Como no uso de verdade: pede, o usuário confirma (alguns segundos depois) e pede de novo."""
+        """Como no uso de verdade: pede, o usuário confirma (alguns segundos depois) e pede de novo com a resposta."""
         primeira = self.pedir(*args, **kwargs)
         if not primeira.startswith("Ainda não criei"):
             return primeira
         self.segundos += 20
-        return self.pedir(*args, **kwargs)
+        return self.pedir(*args, resposta_do_usuario="sim, pode", **kwargs)
 
     def test_so_cria_depois_da_confirmacao(self):
         # Em 27/09 o modelo criou um evento sem perguntar: agora a 1ª chamada só guarda o pedido
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
             texto = self.pedir("Estudar", "amanhã", "8h")
-            self.assertEqual(texto, "Ainda não criei. Pergunte ao usuário: posso criar Estudar, sexta-feira, 25 de "
-                                    "setembro, das 8h às 9h, na conta pessoal? Só chame agenda_criar de novo, com os "
-                                    "mesmos dados, depois que ele disser que sim.")
-            self.segundos += 1.5  # encadeou no mesmo turno, sem o usuário responder
-            self.assertIn("o usuário não confirmou", self.pedir("Estudar", "amanhã", "8h"))
+            self.assertEqual(texto, 'Ainda não criei. Pergunte ao usuário, com estas palavras: "Posso criar Estudar, '
+                                    'sexta-feira, 25 de setembro, das 8h às 9h, na conta pessoal?" Se ele disser que '
+                                    "sim, chame agenda_criar de novo com os mesmos dados e com a resposta dele em "
+                                    "resposta_do_usuario.")
+            # 28/09, no servidor: o modelo repetiu a chamada no mesmo turno 9,7 s depois, e o evento saiu sem o "sim"
+            self.segundos += 9.7
+            self.assertIn("falta a resposta do usuário", self.pedir("Estudar", "amanhã", "8h"))
+            self.assertIn("falta a resposta do usuário", self.pedir("Estudar", "amanhã", "8h",
+                                                                    resposta_do_usuario="sim"))  # rápido demais
             self.assertEqual(self.google.criados, [])
-            self.segundos += 5  # o usuário respondeu "sim"
-            self.assertEqual(self.pedir("estudar", "25/09", "08:00"),
+            self.segundos += 10  # o usuário respondeu
+            self.assertEqual(self.pedir("estudar", "25/09", "08:00", resposta_do_usuario="Sim, pode marcar."),
                              "Evento criado na conta pessoal: estudar, sexta-feira, 25 de setembro, das 8h às 9h.")
             self.assertEqual(len(self.google.criados), 1)
+
+    def test_nao_do_usuario_cancela(self):
+        with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
+            self.pedir("Estudar", "amanhã", "8h")
+            self.segundos += 20
+            self.assertEqual(self.pedir("Estudar", "amanhã", "8h", resposta_do_usuario="não, espera"),
+                             "Não criei, porque o usuário não confirmou. Diga isso a ele em uma frase.")
+            self.segundos += 20
+            self.assertTrue(self.pedir("Estudar", "amanhã", "8h", resposta_do_usuario="sim").startswith(
+                "Ainda não criei."))  # o pedido foi cancelado: começa de novo
+            self.assertEqual(self.google.criados, [])
 
     def test_outro_evento_ou_pedido_velho_pergunta_de_novo(self):
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):

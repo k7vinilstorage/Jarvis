@@ -109,14 +109,13 @@ async def achar(evento: str, quando: str, conta: str, agora: datetime) -> tuple[
     palavras = _palavras(evento)
     if not palavras:
         return [], "", "Diga qual evento: o título, ou parte dele (ex.: inglês)."
-    try:
-        if (quando or "").strip():
+    inicio, fim, alcance = agora, agora + timedelta(days=JANELA_PADRAO), "nos próximos %d dias" % JANELA_PADRAO
+    if (quando or "").strip():
+        try:
             periodo = interpretar(quando, agora)
             inicio, fim, alcance = periodo.inicio, periodo.fim, periodo.alcance
-        else:
-            inicio, fim, alcance = agora, agora + timedelta(days=JANELA_PADRAO), "nos próximos %d dias" % JANELA_PADRAO
-    except PeriodoInvalido as erro:
-        return [], "", str(erro)
+        except PeriodoInvalido:
+            pass  # em 28/09 o modelo mandou "25//11": o título basta, procura nos próximos dias
     contas = google_auth.escolher_contas(conta)
     achados = []
     for c in contas:
@@ -226,7 +225,7 @@ def _pergunta_alcance(acao: str, a: Achado, regra: str, hoje: date) -> str:
 
 # ---------------------------------------------------------------- apagar
 
-async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = "",
+async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = "", resposta_do_usuario: str = "",
                  agora: datetime | None = None) -> str:
     agora = agora or agora_local()
     hoje = agora.date()
@@ -268,12 +267,8 @@ async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = 
             passos = [["PATCH", alvo.agenda, mestre["id"], {"recurrence": cortar_regra(original, corte, alvo.dia_todo)}]]
             desfazer = [["PATCH", alvo.agenda, mestre["id"], {"recurrence": original}]]
         rotulo = alvo.conta["rotulo"]
-        espera = confirmar(
-            ("apagar", rotulo, alvo.item.get("id"), escolha),
-            "Ainda não apaguei. Pergunte ao usuário: posso apagar %s, na conta %s? Só chame agenda_apagar de novo, "
-            "com os mesmos dados, depois que ele disser que sim." % (descricao, rotulo),
-            "Ainda não apaguei: o usuário não confirmou. Pergunte a ele se pode apagar %s e espere a resposta."
-            % descricao)
+        espera = confirmar(("apagar", rotulo, alvo.item.get("id"), escolha), resposta_do_usuario,
+                           "Posso apagar %s, na conta %s?" % (descricao, rotulo), "agenda_apagar", "apaguei")
         if espera:
             return espera
         await _executar(alvo.conta, passos)
@@ -302,7 +297,7 @@ def _novo_horario(base_dia: date, inicio: datetime, fim: datetime, dia_todo: boo
 
 
 async def alterar(evento: str, quando: str = "", alcance: str = "", novo_titulo: str = "", nova_data: str = "",
-                  nova_hora: str = "", nova_duracao_minutos: int = 0, conta: str = "",
+                  nova_hora: str = "", nova_duracao_minutos: int = 0, conta: str = "", resposta_do_usuario: str = "",
                   agora: datetime | None = None) -> str:
     agora = agora or agora_local()
     hoje = agora.date()
@@ -408,10 +403,7 @@ async def alterar(evento: str, quando: str = "", alcance: str = "", novo_titulo:
         descricao = "%s: %s" % (onde, "; ".join(mudancas))
         espera = confirmar(
             ("alterar", rotulo, alvo.item.get("id"), escolha, novo_titulo, str(novo_dia), str(hora), str(duracao)),
-            "Ainda não mudei. Pergunte ao usuário: posso mudar %s, na conta %s? Só chame agenda_alterar de novo, com "
-            "os mesmos dados, depois que ele disser que sim." % (descricao, rotulo),
-            "Ainda não mudei: o usuário não confirmou. Pergunte a ele se pode mudar %s e espere a resposta."
-            % descricao)
+            resposta_do_usuario, "Posso mudar %s, na conta %s?" % (descricao, rotulo), "agenda_alterar", "mudei")
         if espera:
             return espera
         respostas = await _executar(alvo.conta, passos)
@@ -425,7 +417,7 @@ async def alterar(evento: str, quando: str = "", alcance: str = "", novo_titulo:
 
 # ---------------------------------------------------------------- desfazer
 
-async def desfazer(agora: datetime | None = None) -> str:
+async def desfazer(resposta_do_usuario: str = "", agora: datetime | None = None) -> str:
     mudancas = _ler_lixeira()
     agora_s = relogio_parede.time()
     candidatas = [m for m in mudancas if not m.get("desfeita") and agora_s - float(m.get("quando") or 0)
@@ -434,11 +426,8 @@ async def desfazer(agora: datetime | None = None) -> str:
         return "Não há nenhuma mudança na agenda das últimas 24 horas para desfazer."
     ultima = candidatas[-1]
     descricao = str(ultima.get("descricao") or "a última mudança")
-    espera = confirmar(
-        ("desfazer", ultima.get("quando")),
-        "Ainda não desfiz. Pergunte ao usuário: posso desfazer isto: %s? Só chame agenda_desfazer de novo depois que "
-        "ele disser que sim." % descricao,
-        "Ainda não desfiz: o usuário não confirmou. Pergunte a ele e espere a resposta.")
+    espera = confirmar(("desfazer", ultima.get("quando")), resposta_do_usuario,
+                       "Posso desfazer isto: %s?" % descricao, "agenda_desfazer", "desfiz")
     if espera:
         return espera
     try:

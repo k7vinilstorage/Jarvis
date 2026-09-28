@@ -44,25 +44,26 @@ class BaseMudancas(BaseAgenda):
         self.assertTrue(primeira.startswith("Ainda não"), primeira)
         self.assertEqual(self.google.mudancas, [])  # nada mudou antes do sim
         self.segundos += 20
-        return self.rodar(funcao, *args, **kwargs)
+        return self.rodar(funcao, *args, resposta_do_usuario="sim, pode", **kwargs)
 
     def desfazer(self):
         primeira = asyncio.run(mud.desfazer())
         self.assertTrue(primeira.startswith("Ainda não desfiz"), primeira)
         self.segundos += 20
-        return asyncio.run(mud.desfazer())
+        return asyncio.run(mud.desfazer("sim"))
 
 
 class TesteApagar(BaseMudancas):
     def test_avulso_em_dois_passos_e_desfazer(self):
         primeira = self.rodar(mud.apagar, "dentista")
-        self.assertEqual(primeira, 'Ainda não apaguei. Pergunte ao usuário: posso apagar "Dentista", sexta-feira, 25 '
-                                   "de setembro, das 15h às 16h, na conta pessoal? Só chame agenda_apagar de novo, "
-                                   "com os mesmos dados, depois que ele disser que sim.")
+        self.assertEqual(primeira, 'Ainda não apaguei. Pergunte ao usuário, com estas palavras: "Posso apagar '
+                                   '"Dentista", sexta-feira, 25 de setembro, das 15h às 16h, na conta pessoal?" Se ele '
+                                   "disser que sim, chame agenda_apagar de novo com os mesmos dados e com a resposta "
+                                   "dele em resposta_do_usuario.")
         self.segundos += 1.5  # encadeou no mesmo turno
-        self.assertIn("o usuário não confirmou", self.rodar(mud.apagar, "dentista"))
+        self.assertIn("falta a resposta do usuário", self.rodar(mud.apagar, "dentista"))
         self.segundos += 20
-        self.assertEqual(self.rodar(mud.apagar, "dentista"),
+        self.assertEqual(self.rodar(mud.apagar, "dentista", resposta_do_usuario="pode apagar"),
                          'Apagado na conta pessoal: "Dentista", sexta-feira, 25 de setembro, das 15h às 16h. Dá para '
                          "desfazer em até 24 horas.")
         self.assertEqual(self.google.mudancas, [("DELETE", "ana@gmail.com", "e5", None)])
@@ -108,6 +109,10 @@ class TesteApagar(BaseMudancas):
         texto = self.rodar(mud.apagar, "reunião do grupo")
         self.assertEqual(texto, '"Reunião do grupo" é um convite de prof@exemplo.com: não mexo em eventos de outras '
                                 "pessoas. O usuário pode recusar pelo Google Agenda.")
+
+    def test_quando_invalido_procura_nos_proximos_dias(self):
+        # 28/09: o modelo mandou quando="25//11"; o título basta
+        self.assertIn('"Inglês com Jean" se repete', self.rodar(mud.apagar, "inglês", "25//11"))
 
     def test_varios_ou_nenhum(self):
         self.assertIn('Achei mais de um evento com "academia"', self.rodar(mud.apagar, "academia"))  # nas 2 contas

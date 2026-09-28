@@ -20,10 +20,14 @@ MAX_EVENTOS = 12
 MAX_POR_AGENDA = 50
 DURACAO_MINIMA, DURACAO_MAXIMA = 5, 24 * 60
 
-# Criar evento em dois passos: a 1ª chamada só guarda o pedido; o evento sai quando a mesma chamada volta depois
-# que o usuário confirmou. Encadear as duas no mesmo turno leva 1 a 2 s; uma confirmação de verdade leva mais.
-CONFIRMACAO_MINIMA = 5.0    # segundos
+# Mudar a agenda em dois passos: a 1ª chamada só guarda o pedido; a mesma chamada só faz quando volta com a resposta
+# do usuário e depois de um tempo. Só o tempo não basta: em 28/09, com 19 mil tokens de contexto, o modelo repetiu a
+# chamada no mesmo turno 9,7 s depois e o evento saiu sem o "sim".
+CONFIRMACAO_MINIMA = 12.0   # segundos: a pergunta falada e a resposta levam mais que isso
 CONFIRMACAO_MAXIMA = 600.0  # depois disso, pergunta de novo
+_SIM = re.compile(r"\b(sim|pode|podes|confirmo|confirma|confirmado|isso|claro|ok|okay|beleza|certo|positivo|"
+                  r"com certeza|manda|fechado|perfeito|exato|faz|faca)\b")
+_NAO = re.compile(r"\b(nao|cancela|cancelar|espera|pera|deixa|nunca|errado)\b")
 _pendentes: dict[tuple, float] = {}
 
 
@@ -238,33 +242,37 @@ async def ja_existe(conta: dict, titulo: str, inicio: datetime, fim: datetime, d
     return False
 
 
-def confirmar(chave: tuple, primeira: str, cedo_demais: str) -> str:
-    """Dois passos para tudo que muda a agenda. Texto vazio = pode fazer (a mesma chamada voltou entre 5 s e 10 min
-    depois, ou seja, depois de o usuário responder); senão, o que o modelo deve dizer antes."""
+def confirmar(chave: tuple, resposta: str, pergunta: str, ferramenta: str, verbo: str) -> str:
+    """Dois passos para tudo que muda a agenda. Texto vazio = pode fazer: a mesma chamada voltou entre 12 s e 10 min
+    depois, com a resposta afirmativa do usuário. Senão, o que o modelo deve dizer (verbo: 'criei', 'apaguei'...)."""
     agora = relogio()
     for antiga, quando in list(_pendentes.items()):
         if agora - quando > CONFIRMACAO_MAXIMA:
             del _pendentes[antiga]
+    instrucao = ('Pergunte ao usuário, com estas palavras: "%s" Se ele disser que sim, chame %s de novo com os mesmos '
+                 "dados e com a resposta dele em resposta_do_usuario." % (maiuscula(pergunta), ferramenta))
     pedido = _pendentes.get(chave)
     if pedido is None:
         _pendentes[chave] = agora
-        return primeira
-    if agora - pedido < CONFIRMACAO_MINIMA:
-        return cedo_demais
+        return "Ainda não %s. %s" % (verbo, instrucao)
+    resposta = normalizar(resposta)
+    if resposta and _NAO.search(resposta):
+        del _pendentes[chave]
+        return "Não %s, porque o usuário não confirmou. Diga isso a ele em uma frase." % verbo
+    if not resposta or not _SIM.search(resposta) or agora - pedido < CONFIRMACAO_MINIMA:
+        return "Ainda não %s: falta a resposta do usuário. %s" % (verbo, instrucao)
     del _pendentes[chave]
     return ""
 
 
-def _confirmacao(rotulo: str, titulo: str, inicio: datetime, fim: datetime, descricao: str, regra: str) -> str:
-    return confirmar(
-        ("criar", rotulo, normalizar(titulo), inicio.isoformat(), fim.isoformat(), regra),
-        "Ainda não criei. Pergunte ao usuário: posso criar %s, na conta %s? Só chame agenda_criar de novo, com os "
-        "mesmos dados, depois que ele disser que sim." % (descricao, rotulo),
-        "Ainda não criei: o usuário não confirmou. Pergunte a ele se pode criar %s e espere a resposta." % descricao)
+def _confirmacao(rotulo: str, titulo: str, inicio: datetime, fim: datetime, descricao: str, regra: str,
+                 resposta: str) -> str:
+    return confirmar(("criar", rotulo, normalizar(titulo), inicio.isoformat(), fim.isoformat(), regra), resposta,
+                     "Posso criar %s, na conta %s?" % (descricao, rotulo), "agenda_criar", "criei")
 
 
 async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 60, conta: str = "",
-                agora: datetime | None = None, repetir: str = "") -> str:
+                agora: datetime | None = None, repetir: str = "", resposta_do_usuario: str = "") -> str:
     agora = agora or agora_local()
     titulo = " ".join((titulo or "").split())[:200]
     if not titulo:
@@ -320,7 +328,8 @@ async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 6
         descricao += ", repetindo " + repeticao.descricao
     if await ja_existe(escolhida, titulo, inicio, fim, dia_todo=not horario):
         return "Esse evento já existe na conta %s: %s. Não criei outro." % (escolhida["rotulo"], descricao)
-    espera = _confirmacao(escolhida["rotulo"], titulo, inicio, fim, descricao, repeticao.regra if repeticao else "")
+    espera = _confirmacao(escolhida["rotulo"], titulo, inicio, fim, descricao, repeticao.regra if repeticao else "",
+                          resposta_do_usuario)
     if espera:
         return espera
     try:
