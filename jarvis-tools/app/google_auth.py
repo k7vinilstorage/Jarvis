@@ -15,7 +15,7 @@ import time
 import urllib.parse
 
 from app import config
-from app.rede import ErroRede, obter_com_cabecalhos, postar_form, postar_json
+from app.rede import ErroRede, obter_com_cabecalhos, pedir, postar_form, postar_json
 from app.textos import normalizar
 
 URL_AUTORIZACAO = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -219,8 +219,10 @@ async def chamar(conta: dict, metodo: str, url: str, parametros=None, corpo=None
         try:
             if metodo == "GET":
                 status, resposta = await obter_com_cabecalhos(url, parametros, cabecalhos)
-            else:
-                status, resposta = await postar_json(url, corpo, parametros, cabecalhos)
+            elif metodo == "DELETE":
+                status, resposta = await pedir("DELETE", url, parametros=parametros, cabecalhos=cabecalhos)
+            else:  # POST, PATCH, PUT
+                status, resposta = await postar_json(url, corpo, parametros, cabecalhos, metodo=metodo)
         except ErroRede as erro:
             raise ErroGoogle("não consegui falar com o Google (%s)" % erro) from None
         if status != 401:

@@ -39,6 +39,7 @@ LIMITE_FERRAMENTA = 10.0  # ... e numa pergunta que usa ferramenta (várias cham
 META_LISTA, TOTAL_LISTA = 8, 10
 # Chamar o agenda_criar é o jeito de perguntar (a 1ª chamada só guarda o pedido e devolve a data certa para
 # confirmar); falha é dizer que criou um evento num turno que não pedia isso
+ESCRITA_AGENDA = ("agenda_criar", "agenda_alterar", "agenda_apagar", "agenda_desfazer")
 CRIACAO_AFIRMADA = re.compile(r"\b(evento (foi )?criado|criei (o|um|seu) evento|(foi|esta|ficou) (marcado|agendado)|"
                               r"marquei|agendei|vou (criar|adicionar|marcar|agendar|colocar)\b[^.?!]*"
                               r"\b(evento|agenda|calendario))\b")
@@ -458,7 +459,7 @@ def avaliar(ctx: Contexto, caso: dict, turno: dict, r: dict, antes, depois):
             falhas.append("formato ruim para voz: %s" % ", ".join(md))
         for errada in datas_incoerentes(norm, antes.date()):
             falhas.append("dia da semana errado: %s" % errada)
-        if not any(jc.ferramenta_bate("agenda_criar", e) for e in esperadas):
+        if not any(jc.ferramenta_bate(t, e) for e in esperadas for t in ESCRITA_AGENDA):
             criou = afirma_criacao(norm)
             if criou:
                 falhas.append("disse que criou um evento sem o usuário confirmar: \"%s\"" % criou)

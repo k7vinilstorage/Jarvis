@@ -73,7 +73,7 @@ class ServidorFalso:
                 self.end_headers()
                 self.wfile.write(conteudo)
 
-            do_GET = do_POST = _tratar
+            do_GET = do_POST = do_PATCH = do_DELETE = _tratar
 
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), Tratador)
         self.porta = self.http.server_address[1]

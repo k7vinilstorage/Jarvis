@@ -86,6 +86,11 @@ def mensagem(id_, de, assunto, snippet, recebido: datetime, rotulos=("INBOX", "I
             "payload": payload}
 
 
+def _sem_acento(texto):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(texto or "").lower()) if unicodedata.category(c) != "Mn")
+
+
 def _instante(texto):
     return datetime.fromisoformat(texto if len(texto) > 10 else texto + "T00:00:00-03:00")
 
@@ -132,6 +137,7 @@ class GoogleFalso:
         self.token_invalido_uma_vez = set()  # rótulos cujo próximo token vai dar 401 uma vez
         self.emitidos = []
         self.criados = []
+        self.mudancas = []  # (método, agenda, id, corpo) de cada PATCH e DELETE de evento
         self.falhar_agenda = {}  # (rotulo, id da agenda) -> status
         self.sem_permissao_lista = set()  # rótulos sem o escopo calendar.calendarlist.readonly
         self.lista_fora_de_ordem = False  # True: a lista do Gmail vem da mais antiga para a mais nova
@@ -146,7 +152,7 @@ class GoogleFalso:
                                "agendas": agendas if agendas is not None else [
                                    {"kind": "calendar#calendarListEntry", "id": email, "summary": email,
                                     "primary": True, "selected": True, "accessRole": "owner"}],
-                               "eventos": eventos or {}, "mensagens": mensagens or []}
+                               "eventos": eventos or {}, "mestres": {}, "mensagens": mensagens or []}
 
     @property
     def pedidos(self):
@@ -183,6 +189,8 @@ class GoogleFalso:
                                        "status": "PERMISSION_DENIED",
                                        "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}
             return 200, {"kind": "calendar#calendarList", "etag": "x", "items": dados["agendas"]}
+        if caminho.startswith("/calendar/v3/calendars/") and "/events/" in caminho:
+            return self._evento(dados, pedido, caminho)
         if caminho.startswith("/calendar/v3/calendars/") and caminho.endswith("/events"):
             agenda = unquote(caminho[len("/calendar/v3/calendars/"):-len("/events")])
             if (rotulo, agenda) in self.falhar_agenda:
@@ -197,9 +205,11 @@ class GoogleFalso:
                 dados["eventos"].setdefault(agenda, []).append(criado)
                 return 200, criado
             de, ate = _instante(pedido.valor("timeMin")), _instante(pedido.valor("timeMax"))
+            busca = _sem_acento(pedido.valor("q", "")).split()
             itens = [e for e in dados["eventos"].get(agenda, [])
                      if _instante(e["end"].get("dateTime") or e["end"]["date"]) > de
-                     and _instante(e["start"].get("dateTime") or e["start"]["date"]) < ate]
+                     and _instante(e["start"].get("dateTime") or e["start"]["date"]) < ate
+                     and all(p in _sem_acento(e.get("summary", "") + " " + e.get("description", "")) for p in busca)]
             itens.sort(key=lambda e: _instante(e["start"].get("dateTime") or e["start"]["date"]))
             return 200, {"kind": "calendar#events", "summary": agenda, "timeZone": "America/Sao_Paulo",
                          "items": itens[:int(pedido.valor("maxResults", 250))]}
@@ -222,6 +232,43 @@ class GoogleFalso:
         if caminho == "/gmail/v1/users/me/profile":
             return 200, {"emailAddress": dados["email"], "messagesTotal": 3, "threadsTotal": 3, "historyId": "9"}
         return 404, {"error": {"code": 404, "message": "Not Found"}}
+
+    def _evento(self, dados, pedido, caminho):
+        """GET, PATCH e DELETE de um evento (avulso, ocorrência ou o mestre de uma série) e as ocorrências de uma
+        série. As ocorrências ficam em dados["eventos"], com recurringEventId; os mestres, em dados["mestres"]."""
+        agenda, _, resto = caminho[len("/calendar/v3/calendars/"):].partition("/events/")
+        agenda = unquote(agenda)
+        if agenda == "primary":
+            agenda = next((a["id"] for a in dados["agendas"] if a.get("primary")), agenda)
+        partes = [unquote(p) for p in resto.split("/")]
+        id_ = partes[0]
+        mestres = dados["mestres"].setdefault(agenda, {})
+        lista = dados["eventos"].setdefault(agenda, [])
+        if len(partes) > 1 and partes[1] == "instances":
+            de, ate = pedido.valor("timeMin"), pedido.valor("timeMax")
+            itens = [e for e in lista if e.get("recurringEventId") == id_
+                     and (not de or _instante(e["start"].get("dateTime") or e["start"]["date"]) >= _instante(de))
+                     and (not ate or _instante(e["start"].get("dateTime") or e["start"]["date"]) < _instante(ate))]
+            return 200, {"kind": "calendar#events", "items": itens}
+        atual = mestres.get(id_) or next((e for e in lista if e["id"] == id_), None)
+        if atual is None:
+            return 404, {"error": {"code": 404, "message": "Not Found"}}
+        if pedido.metodo == "GET":
+            return 200, atual
+        if pedido.metodo == "PATCH":
+            corpo = pedido.json()
+            atual.update(corpo)
+            self.mudancas.append(("PATCH", agenda, id_, corpo))
+            return 200, atual
+        if pedido.metodo == "DELETE":
+            if id_ in mestres:
+                del mestres[id_]
+                lista[:] = [e for e in lista if e.get("recurringEventId") != id_]
+            else:
+                lista.remove(atual)
+            self.mudancas.append(("DELETE", agenda, id_, None))
+            return 204, ""
+        return 405, {"error": {"code": 405, "message": "Method Not Allowed"}}
 
     def _token(self, campos):
         if campos.get("grant_type") == "authorization_code":

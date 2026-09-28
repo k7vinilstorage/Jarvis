@@ -12,7 +12,8 @@ from apoio import PastaDados, limpar_ambiente
 from app import cli, config, ferramentas, servidor
 
 MOODLE = ["moodle_prazos", "moodle_provas", "moodle_disciplinas", "moodle_conteudo", "moodle_atividade"]
-TODAS = ["hora", "clima", "buscar", "ler_pagina", *MOODLE, "agenda", "agenda_criar", "emails", "ler_email"]
+ESCRITA = ["agenda_criar", "agenda_alterar", "agenda_apagar", "agenda_desfazer"]
+TODAS = ["hora", "clima", "buscar", "ler_pagina", *MOODLE, "agenda", *ESCRITA, "emails", "ler_email"]
 
 
 def nomes(servidor_mcp):
@@ -64,8 +65,11 @@ class TesteRegistro(unittest.TestCase):
         self.assertEqual(ferramentas_mcp["moodle_conteudo"].input_schema["required"], ["disciplina"])
         self.assertEqual(ferramentas_mcp["moodle_prazos"].input_schema["properties"]["disciplina"]["default"], "")
         for nome, ferramenta in ferramentas_mcp.items():
-            if nome != "agenda_criar":
+            if nome in ESCRITA:
+                self.assertFalse(ferramenta.annotations.read_only_hint, nome)
+            else:
                 self.assertTrue(ferramenta.annotations.read_only_hint, nome)
+        self.assertTrue(ferramentas_mcp["agenda_apagar"].annotations.destructive_hint)
 
     def test_registro_de_novo_tira_as_que_sairam(self):
         s = servidor.novo_servidor()
@@ -104,7 +108,7 @@ class TesteCli(unittest.TestCase):
             self.assertEqual((codigo, json.loads(saida)), (0, {"moodle": False, "google": [], "busca": False}))
             codigo, saida, _ = self.rodar()
             self.assertIn("agenda_criar(titulo: str, data: str, hora: str = '', duracao_minutos: int = 60, "
-                          "conta: str = '')", saida)
+                          "conta: str = '', repetir: str = '')", saida)
             self.assertIn("[não configurada", saida)
             codigo, saida, _ = self.rodar("moodle_prazos", "semana")
             self.assertIn("O Moodle não está configurado", saida)

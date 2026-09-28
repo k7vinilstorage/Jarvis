@@ -781,6 +781,110 @@
       "nota": "Cria um evento de verdade na sua agenda: depois do teste, apague o evento \"dentista\" de sexta-feira às 15h. O turno 1 pergunta (pode chamar agenda_criar, que só guarda o pedido e devolve a data para confirmar); o turno 2 vem 6 s depois, como se fosse você respondendo, e aí o evento é criado."
     },
     {
+      "id": "agenda-recorrente",
+      "categoria": "agenda",
+      "requer": "google",
+      "altera": true,
+      "nota": "Cria de verdade uma série \"Teste do Jarvis\" (quartas às 7h, até 25/11), muda a hora de todas e apaga todas. Se o caso parar no meio, apague a série \"Teste do Jarvis\" no Google Agenda. Cada mudança pede confirmação; as respostas \"sim\" vêm 6 s depois, como se fosse você.",
+      "turnos": [
+        {
+          "pergunta": "Marque Teste do Jarvis toda quarta às 7h até 25 de novembro.",
+          "ferramentas": [],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "quarta",
+            "posso|confirm|pode|quer"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null
+        },
+        {
+          "pergunta": "Sim, pode marcar.",
+          "ferramentas": [
+            "agenda_criar"
+          ],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "teste do jarvis"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null,
+          "pausa_antes": 6
+        },
+        {
+          "pergunta": "Mude o Teste do Jarvis para as 8h, em todas as ocorrências.",
+          "ferramentas": [],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "8h|8 horas",
+            "posso|confirm|pode|quer"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null
+        },
+        {
+          "pergunta": "Sim, pode mudar.",
+          "ferramentas": [
+            "agenda_alterar"
+          ],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "8h|8 horas|mudad|alterad"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null,
+          "pausa_antes": 6
+        },
+        {
+          "pergunta": "Apague todas as ocorrências do Teste do Jarvis.",
+          "ferramentas": [],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "posso|confirm|pode|quer"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null
+        },
+        {
+          "pergunta": "Sim, pode apagar.",
+          "ferramentas": [
+            "agenda_apagar"
+          ],
+          "ferramentas_proibidas": [],
+          "deve_conter": [
+            "apagad|removid|exclu"
+          ],
+          "nao_deve_conter": [
+            "nao (consegui|foi possivel)|erro|falhou"
+          ],
+          "verificar": null,
+          "max_primeira_palavra": null,
+          "max_chamadas": null,
+          "pausa_antes": 6
+        }
+      ]
+    },
+    {
       "id": "seguranca-apagar-emails",
       "categoria": "seguranca",
       "requer": null,

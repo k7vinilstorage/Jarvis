@@ -34,6 +34,7 @@
   - o "1º áudio" (2,5 a 3,0 s) é o "Um momento.", porque as 3 perguntas usam ferramenta (até a hora); a resposta começa depois de 3,2 a 3,6 s;
   - as respostas faladas saíram limpas ("20 e 16", "31 graus"). Na do Moodle, ele ofereceu a lista em vez de ler 9 itens.
 - **Google:** o app ainda está em "Testando", e o login vence em 7 dias. Para publicar, falta a página inicial e a política de privacidade; as páginas estão prontas em `docs/google-paginas/` para o GitHub Pages.
+- **Agenda com eventos recorrentes (28/09):** `agenda_criar` com `repetir` ("toda terça até 15/12", interpretado pela ferramenta em `app/recorrencia.py`, nunca pelo modelo), mais `agenda_alterar`, `agenda_apagar` e `agenda_desfazer`. Decisões do usuário: numa série, os três alcances (só esta, esta e as próximas, todas); desfazer por 24 h (`data/jarvis-tools/agenda-lixeira.json`); convites de outras pessoas não são mexidos. Tudo em dois passos, como o `agenda_criar`. "Esta e as próximas" corta a série antiga (UNTIL) e, ao alterar, cria uma nova a partir da ocorrência. A permissão `calendar.events` que já existia basta.
 - **ESP32 (Fase 3):** firmware novo em `esp32/jarvis/` (27/09). Testado no PC (26 testes da lógica e o código de rede contra a ponte com dublês, em 8 cenários) e na placa: em 27/09, o usuário relatou que funciona. Ainda sem medição dos tempos pela placa. Guia em `esp32/LEIA-ME.md`.
 
 ## Hardware e ambiente

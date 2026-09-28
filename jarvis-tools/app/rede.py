@@ -96,10 +96,10 @@ async def postar_form(url: str, campos: dict, cabecalhos: dict | None = None,
 
 
 async def postar_json(url: str, dados, parametros=None, cabecalhos: dict | None = None,
-                      tempo_limite: float = 15.0) -> tuple[int, object]:
-    """POST com corpo JSON; devolve (status, JSON)."""
+                      tempo_limite: float = 15.0, metodo: str = "POST") -> tuple[int, object]:
+    """POST (ou PATCH, PUT) com corpo JSON; devolve (status, JSON)."""
     extra = {"Content-Type": "application/json; charset=utf-8"}
     extra.update(cabecalhos or {})
     corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
-    return await pedir("POST", url, parametros=parametros, cabecalhos=extra, corpo=corpo,
+    return await pedir(metodo, url, parametros=parametros, cabecalhos=extra, corpo=corpo,
                        tempo_limite=tempo_limite)

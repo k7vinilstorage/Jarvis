@@ -11,6 +11,7 @@ from time import monotonic
 from app import google_auth
 from app.google_auth import ErroGoogle
 from app.periodos import PeriodoInvalido, inicio_do_dia, interpretar, rotulo_dia
+from app.recorrencia import RepeticaoInvalida, interpretar_repeticao
 from app.textos import (agora as agora_local, as_hora, contagem, das_hora, data_falada, dia_curto, faixa_horas,
                         como_responder, fuso, juntar_com_e, maiuscula, normalizar)
 
@@ -237,27 +238,33 @@ async def ja_existe(conta: dict, titulo: str, inicio: datetime, fim: datetime, d
     return False
 
 
-def _confirmacao(rotulo: str, titulo: str, inicio: datetime, fim: datetime, descricao: str) -> str:
-    """Texto vazio = pode criar (o usuário já confirmou); senão, o que o modelo deve fazer antes."""
+def confirmar(chave: tuple, primeira: str, cedo_demais: str) -> str:
+    """Dois passos para tudo que muda a agenda. Texto vazio = pode fazer (a mesma chamada voltou entre 5 s e 10 min
+    depois, ou seja, depois de o usuário responder); senão, o que o modelo deve dizer antes."""
     agora = relogio()
-    for chave, quando in list(_pendentes.items()):
+    for antiga, quando in list(_pendentes.items()):
         if agora - quando > CONFIRMACAO_MAXIMA:
-            del _pendentes[chave]
-    chave = (rotulo, normalizar(titulo), inicio.isoformat(), fim.isoformat())
+            del _pendentes[antiga]
     pedido = _pendentes.get(chave)
     if pedido is None:
         _pendentes[chave] = agora
-        return ("Ainda não criei. Pergunte ao usuário: posso criar %s, na conta %s? Só chame agenda_criar de novo, "
-                "com os mesmos dados, depois que ele disser que sim." % (descricao, rotulo))
+        return primeira
     if agora - pedido < CONFIRMACAO_MINIMA:
-        return ("Ainda não criei: o usuário não confirmou. Pergunte a ele se pode criar %s e espere a resposta."
-                % descricao)
+        return cedo_demais
     del _pendentes[chave]
     return ""
 
 
+def _confirmacao(rotulo: str, titulo: str, inicio: datetime, fim: datetime, descricao: str, regra: str) -> str:
+    return confirmar(
+        ("criar", rotulo, normalizar(titulo), inicio.isoformat(), fim.isoformat(), regra),
+        "Ainda não criei. Pergunte ao usuário: posso criar %s, na conta %s? Só chame agenda_criar de novo, com os "
+        "mesmos dados, depois que ele disser que sim." % (descricao, rotulo),
+        "Ainda não criei: o usuário não confirmou. Pergunte a ele se pode criar %s e espere a resposta." % descricao)
+
+
 async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 60, conta: str = "",
-                agora: datetime | None = None) -> str:
+                agora: datetime | None = None, repetir: str = "") -> str:
     agora = agora or agora_local()
     titulo = " ".join((titulo or "").split())[:200]
     if not titulo:
@@ -281,6 +288,13 @@ async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 6
         return "A duração precisa ser um número de minutos, por exemplo 60."
     if horario and not DURACAO_MINIMA <= duracao <= DURACAO_MAXIMA:
         return "A duração precisa ficar entre 5 minutos e 24 horas (1440 minutos)."
+    repeticao = None
+    if (repetir or "").strip():
+        try:
+            repeticao = interpretar_repeticao(repetir, dia, dia_todo=not horario)
+        except RepeticaoInvalida as erro:
+            return str(erro)
+        dia = repeticao.primeiro  # "toda quinta" pedido numa segunda começa na quinta
     try:
         escolhida = google_auth.conta_para_criar(conta)
     except ErroGoogle as erro:
@@ -301,9 +315,12 @@ async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 6
                  "end": {"date": (dia + timedelta(days=1)).isoformat()}}  # o fim de dia todo é exclusivo
         quando = "dia todo"
     descricao = "%s, %s, %s" % (titulo, data_falada(dia, com_ano=dia.year != agora.year), quando)
+    if repeticao:
+        corpo["recurrence"] = [repeticao.regra]
+        descricao += ", repetindo " + repeticao.descricao
     if await ja_existe(escolhida, titulo, inicio, fim, dia_todo=not horario):
         return "Esse evento já existe na conta %s: %s. Não criei outro." % (escolhida["rotulo"], descricao)
-    espera = _confirmacao(escolhida["rotulo"], titulo, inicio, fim, descricao)
+    espera = _confirmacao(escolhida["rotulo"], titulo, inicio, fim, descricao, repeticao.regra if repeticao else "")
     if espera:
         return espera
     try:
