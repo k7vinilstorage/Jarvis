@@ -157,8 +157,9 @@ FERRAMENTAS = [
     Ferramenta("moodle_atividade", moodle_atividade, "Detalhes de uma atividade do Moodle: descrição, prazo, se "
                "já foi entregue e nota.", CONSULTA, "moodle"),
     Ferramenta("agenda", agenda, "Compromissos do Google Agenda.", CONSULTA, "google"),
-    Ferramenta("agenda_criar", agenda_criar, "Cria um evento no Google Agenda. Só use depois que o usuário "
-               "confirmar título, dia e hora.", CRIACAO, "google"),
+    Ferramenta("agenda_criar", agenda_criar, "Cria um evento no Google Agenda, em dois passos: a 1ª chamada não "
+               "cria nada e devolve o dia e a hora para você confirmar com o usuário; depois do sim dele, chame de novo "
+               "com os mesmos dados.", CRIACAO, "google"),
     Ferramenta("emails", emails, "Lista os e-mails do Gmail, dos mais novos para os mais antigos: remetente, "
                "assunto, trecho e id.", CONSULTA, "google"),
     Ferramenta("ler_email", ler_email, "Lê um e-mail inteiro do Gmail, pelo id da lista de emails ou por uma busca.",
