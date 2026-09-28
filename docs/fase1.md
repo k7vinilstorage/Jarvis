@@ -127,6 +127,8 @@ O script liga a busca sozinho se achar o seu contêiner `searxng` numa rede do D
 
 O SearXNG precisa responder em JSON. Se a busca disser que o formato JSON foi recusado, acrescente `json` em `search.formats` no `settings.yml` dele e reinicie. A Open WebUI também precisa disso, então provavelmente já está ativo.
 
+**Privacidade:** o `buscar` recusa consultas com o seu nome ou e-mail, que iriam para os buscadores de fora pelo SearXNG. Os e-mails das contas Google entram sozinhos; o nome, o sobrenome e os apelidos você põe em `JARVIS_TERMOS_PRIVADOS` no `.env`, separados por vírgula, e aplica com `./scripts/fase1-jarvis-tools.sh`. A comparação é por palavra inteira, então um nome comum sozinho bloquearia buscas como "clima em João Pessoa": prefira o nome completo e o sobrenome.
+
 Por segurança, o `ler_pagina` só lê páginas que apareceram numa busca feita nos últimos 30 minutos. Ele nunca acessa a rede da sua casa nem a do Docker. Assim, um e-mail ou uma página com texto malicioso não consegue mandar o Jarvis visitar um endereço inventado levando dados seus.
 
 ### Testar as ferramentas sem o modelo

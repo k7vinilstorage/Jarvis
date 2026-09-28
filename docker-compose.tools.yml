@@ -26,6 +26,7 @@ services:
       DADOS: /data
       MOODLE_URL: ${MOODLE_URL:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      JARVIS_TERMOS_PRIVADOS: ${JARVIS_TERMOS_PRIVADOS:-}
       GOOGLE_CONTA_PADRAO: ${GOOGLE_CONTA_PADRAO:-}
     volumes:
       # Token do Moodle (moodle.json) e contas Google (google/*.json). Nada disso vai para o Hermes.

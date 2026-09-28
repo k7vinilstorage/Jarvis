@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta
 from app.textos import DIAS, MESES, agora as agora_local, data_falada, dia_do_mes, fuso, normalizar
 
 AJUDA = ("Use hoje, amanhã, depois de amanhã, um dia da semana (por exemplo sexta), uma data como 26/09 "
-         "ou dia 30, fim de semana, semana ou mês.")
+         "ou dia 30, fim de semana, semana, próximas semanas ou mês.")
 AJUDA_UM_DIA = "Diga um dia só: hoje, amanhã, um dia da semana (por exemplo sexta) ou uma data como 26/09."
 AJUDA_RECENTE = "Use hoje, ontem, 2 dias ou semana."
 
@@ -38,6 +38,11 @@ class Periodo:
     def alcance(self) -> str:
         """Para completar frases: 'Nada na agenda para hoje, ...' / 'Nada na agenda até quinta-feira, ...'."""
         return "para " + self.rotulo if self.um_dia else self.rotulo
+
+
+def proximo_sabado(hoje: date) -> date:
+    """O sábado do fim de semana pedido: hoje, se já é sábado; no domingo, o da semana que vem."""
+    return hoje + timedelta(days=(5 - hoje.weekday()) % 7)
 
 
 def inicio_do_dia(d: date) -> datetime:
@@ -146,8 +151,9 @@ def interpretar(texto: str, agora: datetime | None = None, *, um_dia: bool = Fal
         raise PeriodoInvalido("Só olho de hoje em diante, ou ontem. Para um dia que já passou, diga a data com "
                               "o ano, como 10/09/%d." % hoje.year)
     elif "fim de semana" in q or "final de semana" in q:
-        sabado = hoje + timedelta(days=(5 - hoje.weekday()) % 7) if hoje.weekday() != 6 else hoje
-        domingo = sabado + timedelta(days=1) if sabado.weekday() == 5 else sabado
+        # No sábado, este; no domingo, o próximo (o de hoje já está acabando)
+        sabado = proximo_sabado(hoje)
+        domingo = sabado + timedelta(days=1)
         rotulo = "no fim de semana, %s e %s" % (
             str(sabado.day) if sabado.month == domingo.month else _data_curta(sabado), _data_curta(domingo))
         periodo = _dias(sabado, domingo, hoje, rotulo)
@@ -158,8 +164,19 @@ def interpretar(texto: str, agora: datetime | None = None, *, um_dia: bool = Fal
             _data_curta(segunda), _data_curta(domingo)))
     else:
         data = _data_no_texto(q, hoje, texto)
+        semanas = re.search(r"\b(?:(\d+|uma|duas|tres|quatro|cinco) )?semanas\b", q)
         if data is not None:
             periodo = _periodo_dia(data, hoje)
+        elif semanas:
+            # "próximas semanas" = 30 dias; "2 semanas", "duas semanas" = 14 dias
+            numero = semanas.group(1)
+            n = int(numero) if numero and numero.isdigit() else NUMEROS.get(numero or "", 0)
+            if 1 <= n <= 4:
+                ultimo = (agora + timedelta(days=7 * n)).date()
+                periodo = Periodo(agora, inicio_do_dia(ultimo + timedelta(days=1)),
+                                  "até " + data_falada(ultimo, com_ano=ultimo.year != hoje.year), False)
+            else:
+                periodo = Periodo(agora, agora + timedelta(days=30), "nos próximos 30 dias", False)
         elif "semana" in palavras or re.search(r"\b(7|sete) dias\b", q) or "proximos dias" in q:
             # O rótulo cita o sétimo dia; a janela vai até o fim dele (um prazo às 23h59 desse dia entra)
             ultimo = (agora + timedelta(days=7)).date()

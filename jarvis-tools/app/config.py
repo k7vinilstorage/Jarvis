@@ -7,6 +7,8 @@ import os
 import re
 from pathlib import Path
 
+from app.textos import normalizar
+
 log = logging.getLogger("jarvis-tools")
 
 ROTULO_VALIDO = re.compile(r"^[a-z0-9][a-z0-9-]{0,29}$")  # pessoal, faculdade, trabalho-2
@@ -99,6 +101,17 @@ def conta_google_padrao() -> str:
     if escolhida in contas:
         return escolhida
     return contas[0] if contas else ""
+
+
+def termos_privados() -> list[str]:
+    """O que nunca vai para uma busca na web, já normalizado: JARVIS_TERMOS_PRIVADOS (nomes e apelidos do usuário,
+    separados por vírgula) e o e-mail de cada conta Google autorizada, inteiro e só a parte antes do @."""
+    termos = (os.environ.get("JARVIS_TERMOS_PRIVADOS") or "").split(",")
+    for rotulo in contas_google():
+        email = str((ler_json(arquivo_conta_google(rotulo)) or {}).get("email") or "")
+        if "@" in email:
+            termos += [email, re.sub(r"[._+]+", " ", email.split("@")[0])]  # joao.silva -> "joao silva"
+    return sorted({normalizar(t) for t in termos if len(normalizar(t)) >= 3})
 
 
 def searxng_url() -> str:

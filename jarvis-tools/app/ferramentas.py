@@ -24,7 +24,8 @@ CONSULTA = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentH
 # Cria algo novo (evento), sem apagar nem alterar o que existe
 CRIACAO = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)
 
-QUANDO_FUTURO = "hoje, amanhã, um dia da semana, uma data (26/09), fim de semana, semana ou mês."
+QUANDO_FUTURO = ("hoje, amanhã, um dia da semana, uma data (26/09), fim de semana, semana, "
+                 "próximas semanas (30 dias) ou mês.")
 CONTA = "Rótulo ou e-mail da conta Google. Vazio = todas."
 
 
@@ -68,8 +69,8 @@ DISCIPLINA = "Nome da disciplina como o usuário disser, mesmo abreviado (ex.: T
 
 
 async def moodle_prazos(
-    quando: Annotated[str, Field(description="semana, hoje, amanhã, um dia da semana, uma data (26/09), mês "
-                                             "ou atrasadas.")] = "semana",
+    quando: Annotated[str, Field(description="semana, hoje, amanhã, um dia da semana, uma data (26/09), "
+                                             "próximas semanas (30 dias), mês ou atrasadas.")] = "semana",
     disciplina: Annotated[str, Field(description=DISCIPLINA)] = "",
 ) -> str:
     return await moodle.prazos(quando, disciplina)

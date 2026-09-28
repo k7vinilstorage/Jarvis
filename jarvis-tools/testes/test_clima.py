@@ -98,6 +98,12 @@ class TesteQuando(unittest.TestCase):
     def test_semana_e_fim_de_semana(self):
         self.assertEqual(self.q("semana"), ("semana", list(range(7))))
         self.assertEqual(self.q("fim de semana"), ("dia", [2, 3]))
+        # No domingo: o próximo sábado e domingo, nunca hoje misturado com o sábado seguinte
+        domingo = [date(2026, 9, 27) + timedelta(days=i) for i in range(8)]
+        self.assertEqual(clima.interpretar_quando("fim de semana", domingo), ("dia", [6, 7]))
+        sabado = [date(2026, 9, 26) + timedelta(days=i) for i in range(8)]
+        self.assertEqual(clima.interpretar_quando("fim de semana", sabado), ("dia", [0, 1]))
+        self.assertEqual(clima.interpretar_quando("semana", domingo), ("semana", list(range(7))))
 
     def test_dias_da_semana_e_datas(self):
         self.assertEqual(self.q("sexta"), ("dia", [1]))

@@ -2,16 +2,19 @@
 proteção contra SSRF."""
 import asyncio
 import gzip
+import json
 import os
+import tempfile
 import threading
 import time
 import unittest
 from datetime import datetime
+from pathlib import Path
 from unittest import mock
 
 from apoio import ServidorFalso, limpar_ambiente
 
-from app import busca, textos
+from app import busca, config, textos
 
 AGORA = datetime(2026, 9, 25, 10, 0, tzinfo=textos.fuso())  # sexta-feira
 
@@ -77,7 +80,8 @@ class TesteBuscar(unittest.TestCase):
                                     "Quatro (b.com, link: https://b.com/4); Cinco (c.com, link: https://c.com/5); "
                                     "Seis (d.com, link: https://d.com/6)")
         self.assertEqual(linhas[7:], ["Resposta direta do buscador: 26.04 é LTS",
-                                      "Resumo do buscador sobre Ubuntu: Ubuntu é uma distribuição Linux."])
+                                      "Resumo do buscador sobre Ubuntu: Ubuntu é uma distribuição Linux.",
+                                      busca.LEMBRETE])
         self.assertTrue(busca.link_recente("https://pt.wikipedia.org/wiki/Ubuntu"))  # liberado para ler_pagina
         self.assertTrue(busca.link_recente("https://d.com/6"))
         self.assertNotIn("magnet", texto)
@@ -92,6 +96,13 @@ class TesteBuscar(unittest.TestCase):
         self.respostas["corpo"] = {"results": [], "answers": [], "infoboxes": []}
         self.assertEqual(asyncio.run(busca.buscar("xyz")), 'Não encontrei nada na web para "xyz".')
         self.assertEqual(asyncio.run(busca.buscar("  ")), "Diga o que pesquisar.")
+
+    def test_consulta_com_dado_pessoal_nao_sai_de_casa(self):
+        # O modelo buscou "estado dos servidores de <nome do usuário>": a consulta ia para os buscadores de fora
+        with mock.patch.dict(os.environ, {"JARVIS_TERMOS_PRIVADOS": "Beltrano de Tal"}):
+            self.assertEqual(asyncio.run(busca.buscar("estado dos servidores de beltrano de tal")), busca.PRIVADO)
+            self.assertIn("Fonte 1", asyncio.run(busca.buscar("servidores Beltrano")))  # só o nome inteiro
+        self.assertEqual(len(self.searxng.pedidos), 1)
 
     def test_formato_json_desligado(self):
         self.respostas.update(status=403, corpo="<html>Forbidden</html>")
@@ -130,6 +141,30 @@ TEXTO_SIMPLES = ("Notas da versão\n\nO kernel padrão do Ubuntu 26.04 é o 6.17
 HTML = {"Content-Type": "text/html; charset=utf-8"}
 LOCAIS = ("ubuntu.exemplo.com.br", "noticias.exemplo.com.br", "texto.exemplo.com.br", "lento.exemplo.com.br",
           "arquivos.exemplo.com.br", "videos.exemplo.com.br")
+
+
+class TesteTermosPrivados(unittest.TestCase):
+    def test_do_ambiente_e_das_contas_google(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            google = Path(pasta) / "google"
+            google.mkdir()
+            (google / "pessoal.json").write_text(json.dumps({"refresh_token": "r", "email": "fulano.detal@exemplo.com"}))
+            (google / "velha.json").write_text(json.dumps({"email": "sem.token@exemplo.com"}))  # não autorizada
+            (google / "cliente.json").write_text("{}")
+            ambiente = {**limpar_ambiente(), "DADOS": pasta, "JARVIS_TERMOS_PRIVADOS": "Beltrano, Zé Ninguém , x,"}
+            with mock.patch.dict(os.environ, ambiente):
+                self.assertEqual(config.termos_privados(),
+                                 ["beltrano", "fulano detal", "fulano.detal@exemplo.com", "ze ninguem"])
+                for consulta in ("estado dos servidores de Beltrano", "ZÉ NINGUÉM notícias", "Fulano Detal",
+                                 "quem é fulano.detal@exemplo.com"):
+                    self.assertTrue(busca.tem_termo_privado(consulta), consulta)
+                for consulta in ("beltranos antigos", "clima em João Pessoa", "exemplo.com"):
+                    self.assertFalse(busca.tem_termo_privado(consulta), consulta)
+
+    def test_sem_nada_configurado(self):
+        with tempfile.TemporaryDirectory() as pasta, mock.patch.dict(os.environ, {**limpar_ambiente(), "DADOS": pasta}):
+            self.assertEqual(config.termos_privados(), [])
+            self.assertFalse(busca.tem_termo_privado("qualquer coisa"))
 
 
 class TesteBuscaComLeitura(unittest.TestCase):
@@ -222,6 +257,7 @@ class TesteBuscaComLeitura(unittest.TestCase):
             "| A atualização pode ser feita pelo gerenciador de programas, sem perder nenhum arquivo pessoal.",
             "Fonte 3: Notas (texto.exemplo.com.br). Link: %s" % self.url("texto.exemplo.com.br", "/notas.txt"),
             "Trechos: O kernel padrão do Ubuntu 26.04 é o 6.17.",
+            busca.LEMBRETE,
         ])
 
     def test_pagina_que_falha_usa_o_trecho_do_buscador(self):
@@ -284,6 +320,7 @@ class TesteBuscaComLeitura(unittest.TestCase):
             "Trecho do buscador (a página não foi lida): Assista",
             "Fonte 2: Post (x.com). Link: https://x.com/ubuntu/status/1",
             "Trecho do buscador (a página não foi lida): Saiu!",
+            busca.LEMBRETE,
         ])
 
     def test_links_mostrados_ficam_liberados_para_ler_pagina(self):
@@ -318,7 +355,9 @@ class TesteBuscaComLeitura(unittest.TestCase):
             self.assertLessEqual(len(linha), len("Trechos: ") + busca.MAX_POR_PAGINA + 10)
             for pedaco in linha[len("Trechos: "):].split(" | "):
                 self.assertLessEqual(len(pedaco), busca.MAX_PARAGRAFO + 1)
-        self.assertTrue(texto.endswith("…"), texto[-100:])  # a caixa do buscador, cortada, fica no fim
+        corpo, lembrete = texto.rsplit("\n", 1)
+        self.assertEqual(lembrete, busca.LEMBRETE)  # o lembrete nunca é cortado
+        self.assertTrue(corpo.endswith("…"), corpo[-100:])  # a caixa do buscador, cortada, fica antes dele
 
 
 class TesteParagrafos(unittest.TestCase):

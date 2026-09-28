@@ -120,4 +120,5 @@ class PastaDados:
 
 def limpar_ambiente():
     """Variáveis que mudam o comportamento e não devem vazar do ambiente de quem roda os testes."""
-    return {k: "" for k in ("SEARXNG_URL", "GOOGLE_CONTA_PADRAO", "MOODLE_URL") if k in os.environ}
+    return {k: "" for k in ("SEARXNG_URL", "GOOGLE_CONTA_PADRAO", "MOODLE_URL", "JARVIS_TERMOS_PRIVADOS")
+            if k in os.environ}

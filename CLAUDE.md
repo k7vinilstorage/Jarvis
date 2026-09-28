@@ -24,13 +24,12 @@ PC ou ESP32 --WebSocket 10800 (token)--> jarvis-voz --> Whisper (Wyoming, CPU)
 2. Fase 2 (voz): instalada no servidor em 25/09. No `medicoes/voz-20260925-2015.md`, o Whisper acertou 100%, mas o "1º áudio" (2,5 a 3,0 s) é o "Um momento."; a resposta começa depois de 3,2 a 3,6 s. Falta:
    - o `voz-teste.sh` medir o 1º áudio da resposta separado do "Um momento.";
    - ajustar o Whisper (1,4 a 2,0 s na CPU) e a voz do Piper.
-3. **Agora: Fase 3 (ESP32)**, antecipada pelo usuário em 27/09. O firmware está em `esp32/jarvis/` (PlatformIO, ESP32 clássico, INMP441, PCM5102 em `s16le` na taxa do Piper, BOOT e LED da placa; guia em `esp32/LEIA-ME.md`). Testado no PC (a lógica com `pio test -e nativo`, o código de rede contra a ponte com dublês no `teste-ponte/rodar.sh`) e, em 27/09, na placa: o usuário relatou que funciona. Ainda sem medição dos tempos pela placa.
-4. **Depois: acabamento da Fase 1** (ordem combinada com o usuário):
-   - liberar conhecimento geral no SOUL (a regra de precisão vale para os dados dele e fatos atuais);
-   - "próximas semanas" = 30 dias;
-   - busca com site e data de cada fonte, e dizer quando as fontes discordam;
-   - nada de markdown nas respostas;
-   - `testes/jarvis-casos.json` mais exigente, para pegar esses casos.
+3. Fase 3 (ESP32), antecipada pelo usuário em 27/09. O firmware está em `esp32/jarvis/` (PlatformIO, ESP32 clássico, INMP441, PCM5102 em `s16le` na taxa do Piper, BOOT e LED da placa; guia em `esp32/LEIA-ME.md`). Testado no PC (a lógica com `pio test -e nativo`, o código de rede contra a ponte com dublês no `teste-ponte/rodar.sh`) e, em 27/09, na placa: o usuário relatou que funciona. Ainda sem medição dos tempos pela placa.
+4. **Agora: acabamento da Fase 1**, a partir do `medicoes/teste-20260927-2259-qwen3.5-4b.md` (26 de 27, mas com respostas erradas que passaram). Feito em 27/09, testado só com testes de unidade:
+   - ferramentas: "fim de semana" num domingo = o próximo (o clima misturava hoje com o sábado seguinte); "próximas semanas" = 30 dias (dava erro); `buscar` recusa o nome e o e-mail do usuário (`JARVIS_TERMOS_PRIVADOS` e as contas Google) e termina com um lembrete de citar site e data;
+   - SOUL: conhecimento geral sem busca, uma ferramenta por pergunta, nada de oferecer o que nenhuma ferramenta faz, nome do usuário só de vez em quando, dia da semana sempre o da ferramenta;
+   - testador: markdown reprova sempre; dia da semana incoerente com a data e promessas sem ferramenta reprovam em todo turno; `max_chamadas` e `verificar: fim_de_semana`; 3 casos novos (33 no total). Testes das conferências em `testes/test_conferencias.py`.
+   Falta: o usuário rodar no servidor e comparar, depois medir temperatura 0,5 contra 0,3.
 5. **Por último: Honcho** (memória de longo prazo, `docs/honcho.md`), medindo com e sem ele. Ligar junto o `VOZ_SESSAO_HERMES`.
 6. Fase 4: wake word, rotinas, barge-in.
 
@@ -72,6 +71,7 @@ docker compose run --rm --no-deps jarvis-voz python -m unittest discover -s test
 # ou, fora do Docker, com Python 3.12 e o requirements.txt de cada pasta:
 cd jarvis-tools && python -m unittest discover -s testes
 cd jarvis-voz && PYTHONPATH=.:testes python -m unittest discover -s testes
+python3 -m unittest discover -s testes   # na raiz: as conferências do testar-jarvis.py
 
 # Firmware do ESP32 (no PC, em esp32/jarvis)
 pio test -e nativo                     # lógica, sem placa

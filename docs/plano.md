@@ -7,7 +7,16 @@
 ## Situação
 - **Fase 0:** pronta e medida.
 - **Fase 1: meta atingida.** No teste real de 25/09 às 19h06 (`qwen3.5:4b`, temperatura 0,5, Google com duas contas), foram 27 de 27 casos e 10 de 10 perguntas da lista.
-- **Acabamento da Fase 1** (fica para depois da voz). São os problemas que o teste não pegou:
+- **Acabamento da Fase 1: em andamento (27/09).** O teste de 27/09 às 22h59 deu 26 de 27, mas lendo as respostas:
+  - **privacidade:** em "servidores", ele disse "Vou verificar" e buscou na web com o nome do usuário;
+  - "fim de semana" num domingo: a ferramenta misturava hoje com o sábado seguinte, e ele disse "sábado, 30 de setembro" (era quarta);
+  - "próximas semanas" dava erro na ferramenta; ele repetiu com "semana" e negou uma entrega de TCC de 10/10;
+  - chamou agenda e e-mails numa pergunta de Moodle (1ª palavra em 6,8 s; 8,2 s na voz);
+  - ofereceu o que não faz ("quer que eu te avise?", "concorda com a criação da skill?");
+  - inventou ("deve ter chegado o saldo", "três coisas" seguidas de seis) e estropiou nomes ("Aprendizagem Professa");
+  - buscou na web para explicar webhook; markdown em 6 respostas.
+  Feito: ferramentas corrigidas (com testes), SOUL reescrito, testador mais exigente (`testes/test_conferencias.py`). Decisões do usuário: nome só de vez em quando; no domingo, "fim de semana" é o próximo; "Engenharia da Computação" continua na lista de disciplinas; medir temperatura 0,3 contra 0,5.
+- Problemas de 25/09 (antes da voz), que o teste também não pegava:
   - recusou "dicas para estudar", porque a regra de precisão foi aplicada a conhecimento geral;
   - a busca se contradisse (Ubuntu 26.04 "esperado para 2027"; Python 3.16 chamado de mais recente, sem citar o site);
   - "entregas de TCC nas próximas semanas" olhou só esta semana e fez 4 chamadas;
@@ -110,7 +119,7 @@ Na GPU, 5462 de 6144 MiB estão em uso. A geração faz ~64 tokens/s e a leitura
 - **Fase 2:**
   - o `voz-teste.sh` medir o 1º áudio da resposta separado do "Um momento.";
   - ajustar o Whisper (small ou medium) e a voz do Piper.
-- **Acabamento da Fase 1:** os itens da Situação.
+- **Acabamento da Fase 1:** rodar `./scripts/fase1-jarvis-tools.sh` e o `testar-jarvis.py` no servidor, ler as respostas, e comparar a temperatura 0,5 com 0,3.
 - **Honcho**, por último.
 - Publicar o app Google.
 - **Fase 4:** palavra de ativação, rotinas, barge-in, Home Assistant e Beszel.

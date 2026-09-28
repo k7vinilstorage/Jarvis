@@ -7,13 +7,15 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from app.periodos import proximo_sabado
 from app.rede import ErroRede, obter_json
 from app.textos import DIAS, data_falada, inteiro, normalizar
 
 URL_BUSCA = "https://geocoding-api.open-meteo.com/v1/search"
 URL_PREVISAO = "https://api.open-meteo.com/v1/forecast"
 VALIDADE_PREVISAO = 600  # segundos; a previsão muda devagar
-DIAS_DE_PREVISAO = 7
+DIAS_DE_PREVISAO = 8  # no domingo, o fim de semana seguinte acaba no oitavo dia
+DIAS_DA_SEMANA = 7
 
 VARIAVEIS_AGORA = "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m"
 VARIAVEIS_DIA = ("weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"
@@ -147,9 +149,10 @@ def interpretar_quando(quando: str, datas: list[date]) -> tuple[str, list[int]] 
     if "amanha" in q:
         return "dia", [1] if len(datas) > 1 else []
     if "fim de semana" in q or "final de semana" in q:
-        return "dia", [i for i, d in enumerate(datas) if d.weekday() >= 5][:2]
+        sabado = proximo_sabado(datas[0])
+        return "dia", [i for i, d in enumerate(datas) if d in (sabado, sabado + timedelta(days=1))]
     if "semana" in q or "proximos dias" in q or "7 dias" in q or "sete dias" in q:
-        return "semana", list(range(len(datas)))
+        return "semana", list(range(min(len(datas), DIAS_DA_SEMANA)))
     for palavra in q.split():
         if palavra in _NOMES_DIAS:
             alvo = _NOMES_DIAS[palavra]
@@ -262,7 +265,7 @@ def montar_texto(local: Local, dados: dict, quando: str) -> str:
         return "Não entendi o dia pedido (%s). %s" % (quando, AJUDA_QUANDO)
     modo, indices = interpretado
     if not indices:
-        return "Só tenho previsão para os próximos %d dias." % DIAS_DE_PREVISAO
+        return "Só tenho previsão para os próximos %d dias." % len(datas)
     momento = (dados.get("current") or {}).get("time")
     hora_atual = datetime.fromisoformat(momento).hour if momento else 0
 

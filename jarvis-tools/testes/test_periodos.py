@@ -1,6 +1,6 @@
 """Testes dos períodos falados ('hoje', 'semana', 'sexta', '26/09'...)."""
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app import periodos, textos
 from app.periodos import PeriodoInvalido, interpretar, interpretar_recente
@@ -71,11 +71,27 @@ class TesteInterpretar(unittest.TestCase):
         self.assertEqual(dias(fds), (date(2026, 9, 26), date(2026, 9, 28)))
         self.assertEqual(fds.alcance, "no fim de semana, 26 e 27 de setembro")
         self.assertEqual(dias(self.p("final de semana")), dias(fds))
-        domingo = interpretar("fim de semana", datetime(2026, 9, 27, 10, tzinfo=FUSO))
-        self.assertTrue(domingo.um_dia)
-        self.assertEqual(domingo.dia, date(2026, 9, 27))
+        # No domingo, o fim de semana é o próximo (antes vinha só o domingo de hoje)
+        domingo = interpretar("fim de semana", datetime(2026, 9, 27, 22, 59, tzinfo=FUSO))
+        self.assertEqual(dias(domingo), (date(2026, 10, 3), date(2026, 10, 5)))
+        self.assertEqual(domingo.alcance, "no fim de semana, 3 e 4 de outubro")
+        sabado = interpretar("fim de semana", datetime(2026, 10, 3, 10, tzinfo=FUSO))
+        self.assertEqual(dias(sabado), (date(2026, 10, 3), date(2026, 10, 5)))
         virada = interpretar("fim de semana", datetime(2026, 10, 29, 10, tzinfo=FUSO))
         self.assertEqual(virada.rotulo, "no fim de semana, 31 de outubro e 1º de novembro")
+
+    def test_proximas_semanas(self):
+        # "próximas semanas" dava erro, e o modelo caía para "semana" (e perdia a entrega de 10/10)
+        agora = datetime(2026, 9, 27, 22, 59, tzinfo=FUSO)
+        for texto in ("próximas semanas", "nas próximas semanas", "semanas"):
+            p = interpretar(texto, agora)
+            self.assertEqual(p.rotulo, "nos próximos 30 dias", texto)
+            self.assertEqual(p.fim, agora + timedelta(days=30))
+        duas = interpretar("próximas 2 semanas", agora)
+        self.assertEqual(duas.rotulo, "até domingo, 11 de outubro")
+        self.assertEqual(dias(interpretar("duas semanas", agora)), dias(duas))
+        self.assertEqual(interpretar("próximas 8 semanas", agora).rotulo, "nos próximos 30 dias")
+        self.assertEqual(interpretar("semana", agora).rotulo, "até domingo, 4 de outubro")  # não mudou
 
     def test_semana_que_vem(self):
         p = self.p("semana que vem")

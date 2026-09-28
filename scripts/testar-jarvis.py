@@ -26,6 +26,7 @@ import re
 import shutil
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # não deixa __pycache__ na pasta scripts
@@ -37,7 +38,7 @@ LIMITE_SIMPLES = 3.0     # segundos até a 1ª palavra numa pergunta sem ferrame
 LIMITE_FERRAMENTA = 10.0  # ... e numa pergunta que usa ferramenta (várias chamadas: Moodle, e-mail)
 META_LISTA, TOTAL_LISTA = 8, 10
 SEMPRE_PROIBIDAS = ["agenda_criar"]  # criar evento sem o turno pedir é sempre falha
-VERIFICACOES = ("hora", "data", "sem_markdown")
+VERIFICACOES = ("hora", "data", "sem_markdown", "fim_de_semana")  # sem_markdown: hoje vale para todo turno
 INTEGRACOES = {"moodle": ("Moodle", "Moodle não configurado"),
                "google": ("Google", "Google não configurado"),
                "busca": ("busca", "busca na web não configurada")}
@@ -51,6 +52,24 @@ MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "ag
          "novembro", "dezembro"]
 MESES_FALADOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                  "outubro", "novembro", "dezembro"]
+
+# Oferecer o que nenhuma ferramenta faz: avisos, lembretes, criar skills
+PROMESSAS = [
+    r"\b(quer|deseja|gostaria) que eu (te |lhe )?(avise|lembre)\b",
+    r"\b(posso|vou|irei) (te |lhe )?avisar\b",
+    r"\b(posso|vou|irei) (te |lhe )lembrar\b",  # "vou lembrar disso" é a memória, e vale
+    r"\b(concorda|aprova|autoriza)\w* (com )?a criacao\b",
+    r"\bquer que eu (crie|implemente)\b[^.?!]*\bskill",  # criar evento existe (agenda_criar); skill, não
+]
+_DIA = r"(\d{1,2}|primeiro)(?:º|°|o)?"
+_SEMANA = r"(segunda|terca|quarta|quinta|sexta|sabado|domingo)(?:-feira)?"
+_MES = r"(%s)" % "|".join(MESES)
+# "sábado, 30 de setembro" e "30 de setembro, sábado" (mas não "3 de outubro, domingo, 4", que é outro dia)
+DATA_COM_SEMANA = [
+    (re.compile(r"\b%s,?\s+(?:dia\s+)?%s\s+de\s+%s(?:\s+de\s+(\d{4}))?" % (_SEMANA, _DIA, _MES)), (0, 1, 2, 3)),
+    (re.compile(r"\b(?:dia\s+)?%s\s+de\s+%s(?:\s+de\s+(\d{4}))?,?\s+%s(?!,?\s*(?:dia\s+)?\d)"
+                % (_DIA, _MES, _SEMANA)), (3, 0, 1, 2)),
+]
 
 log = jc.log
 
@@ -122,6 +141,9 @@ def validar(casos) -> list:
             for v in lista(t, "verificar"):
                 if v not in VERIFICACOES:
                     problemas.append("%s: verificar \"%s\" não existe (use %s)" % (ot, v, ", ".join(VERIFICACOES)))
+            maximo = t.get("max_chamadas")
+            if maximo is not None and (not isinstance(maximo, int) or isinstance(maximo, bool) or maximo < 0):
+                problemas.append("%s: max_chamadas deve ser um número inteiro" % ot)
             lim = t.get("max_primeira_palavra")
             if lim is not None and (not isinstance(lim, (int, float)) or lim <= 0):
                 problemas.append("%s: max_primeira_palavra deve ser um número de segundos" % ot)
@@ -299,6 +321,51 @@ def conferir_data(texto_norm: str, antes, depois) -> bool:
     return False
 
 
+def _data_perto(dia: int, mes: int, ano, hoje: date) -> date | None:
+    """A data com esse dia e mês mais perto de hoje (ou no ano dito). None se não existe (31 de setembro)."""
+    candidatas = []
+    for a in ([int(ano)] if ano else [hoje.year - 1, hoje.year, hoje.year + 1]):
+        try:
+            candidatas.append(date(a, mes, dia))
+        except ValueError:
+            pass
+    return min(candidatas, key=lambda d: abs((d - hoje).days)) if candidatas else None
+
+
+def datas_incoerentes(texto_norm: str, hoje: date) -> list:
+    """Dias da semana que não batem com a data ao lado ("sábado, 30 de setembro" em 2026 é quarta)."""
+    erradas = []
+    for padrao, ordem in DATA_COM_SEMANA:
+        for m in padrao.finditer(texto_norm):
+            semana, dia, mes, ano = (m.group(i + 1) for i in ordem)
+            d = _data_perto(1 if dia == "primeiro" else int(dia), MESES.index(mes) + 1, ano, hoje)
+            if d is None:
+                erradas.append((m.start(), "\"%s\" não existe" % m.group(0).strip()))
+            elif DIAS[d.weekday()] != semana:
+                erradas.append((m.start(), "\"%s\" (%s é %s)" % (m.group(0).strip(), d.strftime("%d/%m/%Y"),
+                                                                 DIAS_FALADOS[d.weekday()])))
+    return [texto for _, texto in sorted(erradas)]  # na ordem em que aparecem
+
+
+def promessas(texto_norm: str) -> list:
+    return [m.group(0) for p in PROMESSAS for m in [re.search(p, texto_norm)] if m]
+
+
+def proximo_fim_de_semana(hoje: date) -> tuple:
+    """O mesmo do jarvis-tools: no sábado, este; no domingo, o da semana que vem."""
+    sabado = hoje + timedelta(days=(5 - hoje.weekday()) % 7)
+    return sabado, sabado + timedelta(days=1)
+
+
+def conferir_fim_de_semana(texto_norm: str, hoje: date) -> bool:
+    for d in proximo_fim_de_semana(hoje):
+        if re.search(r"(?<!\d)0?%d(?:º|°|o)?\s+de\s+%s\b" % (d.day, MESES[d.month - 1]), texto_norm) or \
+                re.search(r"(?<!\d)0?%d/0?%d(?!\d)" % (d.day, d.month), texto_norm) or \
+                (d.day == 1 and re.search(r"\bprimeiro de %s\b" % MESES[d.month - 1], texto_norm)):
+            return True
+    return False
+
+
 def avaliar(ctx: Contexto, caso: dict, turno: dict, r: dict, antes, depois):
     """Confere um turno. Devolve (falhas, avisos, falhas_de_tempo, parar)."""
     falhas, avisos, tempo = [], [], []
@@ -360,11 +427,22 @@ def avaliar(ctx: Contexto, caso: dict, turno: dict, r: dict, antes, depois):
         if "data" in conferir and not conferir_data(norm, antes, depois):
             falhas.append("data errada ou incompleta (esperado: %s, %d de %s)" % (
                 DIAS_FALADOS[antes.weekday()], antes.day, MESES_FALADOS[antes.month - 1]))
+        if "fim_de_semana" in conferir and not conferir_fim_de_semana(norm, antes.date()):
+            sabado, domingo = proximo_fim_de_semana(antes.date())
+            falhas.append("não falou do próximo fim de semana (sábado, %d, e domingo, %d de %s)" % (
+                sabado.day, domingo.day, MESES_FALADOS[domingo.month - 1]))
         md = jc.detectar_markdown(texto)
-        if md and "sem_markdown" in conferir:
+        if md:  # tudo pode virar voz: markdown reprova em todo turno
             falhas.append("formato ruim para voz: %s" % ", ".join(md))
-        elif md:
-            avisos.append("markdown na resposta (%s): atrapalha a leitura em voz alta" % ", ".join(md))
+        for errada in datas_incoerentes(norm, antes.date()):
+            falhas.append("dia da semana errado: %s" % errada)
+        for promessa in promessas(norm):
+            falhas.append("ofereceu o que nenhuma ferramenta faz: \"%s\"" % promessa)
+
+        maximo = turno.get("max_chamadas")
+        if maximo is not None and len(usadas) > maximo:
+            falhas.append("chamou ferramentas %d vezes (máximo %d): %s" % (
+                len(usadas), maximo, ", ".join(jc.nome_curto(u) for u in usadas)))
 
         limite = turno.get("max_primeira_palavra")
         if limite is None:
