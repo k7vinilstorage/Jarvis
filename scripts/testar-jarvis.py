@@ -40,7 +40,8 @@ META_LISTA, TOTAL_LISTA = 8, 10
 # Chamar o agenda_criar é o jeito de perguntar (a 1ª chamada só guarda o pedido e devolve a data certa para
 # confirmar); falha é dizer que criou um evento num turno que não pedia isso
 CRIACAO_AFIRMADA = re.compile(r"\b(evento (foi )?criado|criei (o|um|seu) evento|(foi|esta|ficou) (marcado|agendado)|"
-                              r"marquei|agendei)\b")
+                              r"marquei|agendei|vou (criar|adicionar|marcar|agendar|colocar)\b[^.?!]*"
+                              r"\b(evento|agenda|calendario))\b")
 VERIFICACOES = ("hora", "data", "sem_markdown", "fim_de_semana")  # sem_markdown: hoje vale para todo turno
 INTEGRACOES = {"moodle": ("Moodle", "Moodle não configurado"),
                "google": ("Google", "Google não configurado"),
@@ -61,6 +62,7 @@ PROMESSAS = [
     r"\b(quer|deseja|gostaria) que eu (te |lhe )?(avise|lembre)\b",
     r"\b(posso|vou|irei) (te |lhe )?avisar\b",
     r"\b(posso|vou|irei) (te |lhe )lembrar\b",  # "vou lembrar disso" é a memória, e vale
+    r"\b(eu )?(ja )?te (aviso|lembro)\b",
     r"\b(concorda|aprova|autoriza)\w* (com )?a criacao\b",
     r"\bquer que eu (crie|implemente)\b[^.?!]*\bskill",  # criar evento existe (agenda_criar); skill, não
 ]
@@ -354,12 +356,11 @@ def datas_incoerentes(texto_norm: str, hoje: date) -> list:
 
 
 def afirma_criacao(texto_norm: str) -> str:
-    """O trecho que diz que um evento foi criado (sem negação: 'não criei o evento' vale)."""
-    for ini, fim in clausulas(texto_norm):
-        clausula = texto_norm[ini:fim]
-        m = CRIACAO_AFIRMADA.search(clausula)
-        if m and not NEGACAO.search(clausula):
-            return clausula.strip()[:80]
+    """A frase que diz que um evento foi (ou vai ser) criado. Negação ou condição na mesma frase vale: "não criei
+    o evento", "se quiser, vou criar o evento"."""
+    for frase in re.split(r"[.!?\n]+", texto_norm):
+        if CRIACAO_AFIRMADA.search(frase) and not NEGACAO.search(frase):
+            return frase.strip()[:80]
     return ""
 
 

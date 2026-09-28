@@ -330,10 +330,10 @@
             "nao sei|nao (consegui|foi possivel)|nao tenho acesso"
           ],
           "max_primeira_palavra": 10,
-          "max_chamadas": 1
+          "max_chamadas": 2
         }
       ],
-      "nota": "O segundo turno precisa abrir com ler_email o mesmo e-mail do turno 1, numa chamada só (em 27/09 ele usou o id de exemplo da descrição da ferramenta e acabou lendo outro e-mail). Confira se o resumo bate."
+      "nota": "O segundo turno precisa abrir com ler_email o mesmo e-mail do turno 1. O id do turno 1 não fica na conversa (só o texto), então vale achar pelo assunto: no máximo 2 chamadas (em 27/09 ele inventou um id e precisou de 3). Confira se o resumo bate."
     },
     {
       "id": "busca-ubuntu",

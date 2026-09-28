@@ -68,7 +68,8 @@ class TestePromessas(unittest.TestCase):
                          "Você concorda com a criação dessa skill?",
                          "Posso te avisar amanhã cedo.",
                          "Vou te lembrar às 8h.",
-                         "Quer que eu crie essa skill para você?"):
+                         "Quer que eu crie essa skill para você?",
+                         "Eu já te aviso para não esquecer."):  # caso lembrete, 27/09 às 23h51
             self.assertTrue(tj.promessas(norm(resposta)), resposta)
 
     def test_o_que_pode(self):
@@ -85,11 +86,14 @@ class TesteCriacao(unittest.TestCase):
         self.assertIn("evento criado", tj.afirma_criacao(norm(
             'Evento criado na sua agenda pessoal: "Lembrar de estudar", quinta-feira, 1º de outubro, das 8h às 9h.')))
         self.assertTrue(tj.afirma_criacao(norm("Pronto, marquei dentista na sexta às 15h.")))
+        # 27/09 às 23h51: prometeu criar, sem perguntar e sem chamar a ferramenta
+        self.assertTrue(tj.afirma_criacao(norm("Vou adicionar no seu calendário de hoje para te lembrar de estudar.")))
 
     def test_perguntar_ou_negar_vale(self):
         for resposta in ("Posso criar o evento Estudar, segunda-feira, 28 de setembro, às 8h?",
                          "Ainda não criei o evento: você confirma?",
-                         "Não tenho lembretes. Se quiser, marco um evento na agenda."):
+                         "Não tenho lembretes. Se quiser, marco um evento na agenda.",
+                         "Se quiser, vou criar o evento na agenda."):
             self.assertEqual(tj.afirma_criacao(norm(resposta)), "", resposta)
 
 

@@ -156,7 +156,8 @@ FERRAMENTAS = [
                "materiais. Com assunto, procura dentro dela.", CONSULTA, "moodle"),
     Ferramenta("moodle_atividade", moodle_atividade, "Detalhes de uma atividade do Moodle: descrição, prazo, se "
                "já foi entregue e nota.", CONSULTA, "moodle"),
-    Ferramenta("agenda", agenda, "Compromissos do Google Agenda.", CONSULTA, "google"),
+    Ferramenta("agenda", agenda, "Compromissos do Google Agenda. Não é para atividades e entregas da faculdade: "
+               "isso é moodle_prazos.", CONSULTA, "google"),
     Ferramenta("agenda_criar", agenda_criar, "Cria um evento no Google Agenda, em dois passos: a 1ª chamada não "
                "cria nada e devolve o dia e a hora para você confirmar com o usuário; depois do sim dele, chame de novo "
                "com os mesmos dados.", CRIACAO, "google"),
