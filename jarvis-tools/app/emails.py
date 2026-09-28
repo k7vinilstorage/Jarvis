@@ -510,6 +510,9 @@ async def ler_email(email: str, conta: str = "", agora: datetime | None = None) 
                                                                 google_auth.descrever_contas(todas))
     elif _ID.fullmatch(solto):
         ident = solto
+    elif pedido.startswith("[") or solto.isdigit():
+        # Id inventado ("[3805]"): buscar o número como texto trazia outro e-mail qualquer
+        return _nao_achei(solto, "em nenhuma conta")
     else:
         busca = termos_de_busca(pedido)
 
@@ -530,6 +533,10 @@ async def ler_email(email: str, conta: str = "", agora: datetime | None = None) 
     except ErroGoogle as erro:
         return "Não consegui ler o e-mail: %s." % erro
     onde = "na conta %s" % alvo[0]["rotulo"] if len(alvo) == 1 else "em nenhuma conta"
+    return _nao_achei(ident, onde)
+
+
+def _nao_achei(ident: str, onde: str) -> str:
     # O id de uma resposta anterior não fica na conversa: o modelo inventava um. Procurar pelo assunto resolve.
     return ("Não achei o e-mail %s %s. Se você já disse ao usuário o remetente ou o assunto, chame ler_email com eles "
             "(ex.: AliExpress itens sem taxa), sem id." % (ident, onde))

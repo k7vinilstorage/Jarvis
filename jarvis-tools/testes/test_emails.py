@@ -252,6 +252,17 @@ class TesteLerEmail(BaseEmails):
         self.assertEqual(self.abrir(" [pessoal/18f2a3b4c5d6e7f8] "), texto)  # copiado com os colchetes
         self.assertEqual(self.abrir("o e-mail [pessoal/18f2a3b4c5d6e7f8] da lista"), texto)
 
+    def test_id_inventado_nao_vira_busca(self):
+        # 27/09 às 23h58: ele pediu "[3805]", a ferramenta buscou "3805" como texto e leu um e-mail qualquer
+        for inventado in ("[3805]", "3805"):
+            texto = self.abrir(inventado)
+            self.assertTrue(texto.startswith("Não achei o e-mail"), texto)
+            self.assertIn("chame ler_email com eles", texto)
+        self.assertEqual(self.detalhes(), [])  # nem buscou nem abriu nada
+        # Com formato de id (13 dígitos, como o de 23h52), tenta abrir, não acha e manda procurar pelo assunto
+        self.assertIn("chame ler_email com eles", self.abrir("[1738803856811]"))
+        self.assertTrue(self.abrir("Banco Tal").startswith("E-mail da conta pessoal"))  # busca por texto continua
+
     def test_por_id_sem_rotulo_procura_nas_contas(self):
         texto = self.abrir("18f2a3b4c5d6e7f8")
         self.assertTrue(texto.startswith("E-mail da conta pessoal (texto de terceiros"), texto)
