@@ -109,6 +109,13 @@ class TesteApagar(BaseMudancas):
         self.assertEqual(texto, '"Reunião do grupo" é um convite de prof@exemplo.com: não mexo em eventos de outras '
                                 "pessoas. O usuário pode recusar pelo Google Agenda.")
 
+    def test_longe_procura_no_ano(self):
+        # 28/09: uma série criada para dezembro (a 64 dias) não era achada para apagar
+        self.google.contas["pessoal"]["eventos"]["ana@gmail.com"].append(
+            evento("longe", "Formatura", "2027-02-10T19:00:00-03:00", "2027-02-10T23:00:00-03:00"))
+        self.assertIn('"Formatura", quarta-feira, 10 de fevereiro de 2027', self.rodar(mud.apagar, "formatura"))
+        self.assertIn("nos próximos 12 meses", self.rodar(mud.apagar, "pilates"))
+
     def test_quando_invalido_procura_nos_proximos_dias(self):
         # 28/09: o modelo mandou quando="25//11"; o título basta
         self.assertIn('"Inglês com Jean" se repete', self.rodar(mud.apagar, "inglês", "25//11"))

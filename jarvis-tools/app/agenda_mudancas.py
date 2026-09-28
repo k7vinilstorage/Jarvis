@@ -24,6 +24,7 @@ from app.textos import (PALAVRAS_VAZIAS, agora as agora_local, as_hora, data_fal
                         normalizar)
 
 JANELA_PADRAO = 60  # dias à frente, quando o usuário não diz quando
+JANELA_LONGA = 365  # se nada aparece nos 60 dias (em 28/09 uma série criada para dezembro ficou fora)
 VALIDADE_DESFAZER = 24 * 3600
 MAX_LIXEIRA = 20
 ALCANCES = {
@@ -117,6 +118,14 @@ async def achar(evento: str, quando: str, conta: str, agora: datetime) -> tuple[
         except PeriodoInvalido:
             pass  # em 28/09 o modelo mandou "25//11": o título basta, procura nos próximos dias
     contas = google_auth.escolher_contas(conta)
+    achados = await _procurar(contas, palavras, inicio, fim)
+    if not achados and not (quando or "").strip():
+        fim = agora + timedelta(days=JANELA_LONGA)
+        achados, alcance = await _procurar(contas, palavras, inicio, fim), "nos próximos 12 meses"
+    return achados, alcance, ""
+
+
+async def _procurar(contas: list[dict], palavras: list[str], inicio: datetime, fim: datetime) -> list[Achado]:
     achados = []
     for c in contas:
         for agenda in await _agendas_editaveis(c):
@@ -128,7 +137,7 @@ async def achar(evento: str, quando: str, conta: str, agora: datetime) -> tuple[
                 if item.get("status") != "cancelled" and all(p in titulo for p in palavras):
                     achados.append(Achado(c, agenda, item))
     achados.sort(key=lambda a: a.inicio)
-    return achados, alcance, ""
+    return achados
 
 
 def _descrever_ocorrencia(a: Achado, hoje: date) -> str:
