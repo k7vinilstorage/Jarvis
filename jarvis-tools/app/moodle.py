@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 from app import config
 from app.periodos import PeriodoInvalido, interpretar
 from app.rede import ErroRede, postar_form
-from app.textos import (agora as agora_local, as_hora, contagem, cortar, dia_curto, fuso, html_para_texto,
-                        juntar_com_e, maiuscula, mesma_palavra, normalizar, palavras_chave)
+from app.textos import (RESUMIR, agora as agora_local, as_hora, como_responder, contagem, cortar, dia_curto, fuso,
+                        html_para_texto, juntar_com_e, maiuscula, mesma_palavra, normalizar, palavras_chave)
 
 CAMINHO_REST = "/webservice/rest/server.php"
 TEMPO_LIMITE = 15.0
@@ -601,8 +601,13 @@ _SUFIXO_EVENTO = re.compile(r"\s+(-\s+)?(is due|closes|opens|vence|fecha|abre|te
                             r"est[aá] marcad[oa]\(?a?\)? para esse momento|est[aá] para ser entregue)$", re.I)
 
 
+# O calendário em português põe o momento antes do nome: "Início de Avaliação 1", "Término de Avaliação 1"
+_PREFIXO_EVENTO = re.compile(r"^(in[ií]cio|t[eé]rmino|abertura|encerramento|fechamento)\s+(de|do|da)\s+", re.I)
+
+
 def nome_atividade(evento: dict) -> str:
-    nome = evento.get("activityname") or _SUFIXO_EVENTO.sub("", str(evento.get("name") or "").strip())
+    nome = evento.get("activityname") or _PREFIXO_EVENTO.sub(
+        "", _SUFIXO_EVENTO.sub("", str(evento.get("name") or "").strip()))
     return _limpo(nome) or "sem nome"
 
 
@@ -737,7 +742,18 @@ async def prazos(quando: str = "semana", disciplina: str = "", agora: datetime |
         return "Nenhuma atividade %s no Moodle%s %s." % ("atrasada" if atrasadas else "pendente", onde, alcance)
     cabecalho = "Atividades %s no Moodle%s %s: %d." % ("atrasadas" if atrasadas else "pendentes", onde, alcance,
                                                         len(eventos))
-    return "\n".join([cabecalho] + _com_limite([item_prazo(e, agora) for e in eventos]))
+    itens = _juntar_iguais([item_prazo(e, agora) for e in eventos])
+    return "\n".join([cabecalho] + _com_limite(itens) + [como_responder(len(eventos))])
+
+
+def _juntar_iguais(itens: list[str]) -> list[str]:
+    """Duas atividades diferentes com o mesmo nome e o mesmo prazo (uma no TCC1, outra no TCC2) viram uma linha,
+    avisando: repetidas, pareciam um erro."""
+    vezes: dict[str, int] = {}
+    for item in itens:
+        vezes[item] = vezes.get(item, 0) + 1
+    return [item if vezes[item] == 1 else "%s (%d atividades com esse nome e esse prazo)" % (item, vezes[item])
+            for item in vezes]
 
 
 def _sem_conclusao_repetida(eventos: list[dict]) -> list[dict]:
@@ -787,7 +803,9 @@ async def provas(disciplina: str = "", agora: datetime | None = None) -> str:
             tipo_evento = evento.get("eventtype") or "close"
             if tipo_evento not in ("open", "close"):  # conclusão esperada e outros lembretes não são a prova
                 continue
-            chave = (evento.get("instance") or normalizar(nome),)
+            # Pelo nome limpo na disciplina: o instance das ações e o do calendário não batem (no Moodle da
+            # UTFPR, 2127308 e 126034 para o mesmo questionário)
+            chave = (_id_curso(evento), normalizar(nome_atividade(evento)))
             registro = questionarios.setdefault(chave, {"evento": evento})
             registro.setdefault(tipo_evento, evento)
         elif _eh_prova(nome) and ((modulo and de_acao) or (
@@ -847,7 +865,7 @@ async def provas(disciplina: str = "", agora: datetime | None = None) -> str:
     linhas += _com_limite(itens)
     if not tem_prova:
         linhas.append(NOTA_PROVAS)
-    return "\n".join(linhas)
+    return "\n".join(linhas + [como_responder(len(itens))])
 
 
 # ---------------------------------------------------------------- disciplinas
@@ -1026,7 +1044,7 @@ async def _panorama(curso: dict, agora: datetime) -> str:
         if len(cabem) < len(linhas_secoes):
             linhas.append("Mais %s não couberam aqui; peça um assunto para procurar dentro delas." % contagem(
                 len(linhas_secoes) - len(cabem), "seção", "seções"))
-    return "\n".join(linhas + final)
+    return "\n".join(linhas + final + [RESUMIR])
 
 
 # ---------------------------------------------------------------- busca dentro da disciplina
@@ -1221,7 +1239,7 @@ async def _buscar_na_disciplina(curso: dict, assunto: str, agora: datetime) -> s
         linha = ", ".join(partes) + "."
         trecho = _trecho(doc.corpo, no_corpo) if no_corpo else cortar(doc.corpo, 150)
         linhas.append("- %s%s" % (linha, " Trecho: " + trecho if trecho else ""))
-    return "\n".join(linhas + rodape)
+    return "\n".join(linhas + rodape + [RESUMIR])
 
 
 async def conteudo(disciplina: str, assunto: str = "", agora: datetime | None = None) -> str:
@@ -1470,7 +1488,7 @@ async def _detalhar(curso: dict, secao: dict, modulo: dict, agora: datetime) -> 
         detalhes, falhas = await _detalhes_pagina(curso, modulo, agora)
     else:
         detalhes, falhas = _linhas_datas(modulo, agora) + [_descricao(modulo.get("description"))], []
-    return "\n".join(linhas + detalhes + ([_nao_li(falhas)] if falhas else []))
+    return "\n".join(linhas + detalhes + ([_nao_li(falhas)] if falhas else []) + [RESUMIR])
 
 
 async def atividade(atividade: str, disciplina: str = "", agora: datetime | None = None) -> str:

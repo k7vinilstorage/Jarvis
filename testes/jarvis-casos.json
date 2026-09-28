@@ -7,13 +7,14 @@
     "requer_caso: id de outro caso que precisa ter rodado antes nesta mesma rodada (se não rodou, este é pulado).",
     "altera: true quando o caso cria dados de verdade (evento na agenda, memória). Só roda com --incluir-escrita, e uma vez só mesmo com --repetir.",
     "pausa_antes: segundos de espera antes do caso (opcional).",
-    "Em cada turno: pergunta; ferramentas = pelo menos uma delas precisa ser usada (compara pelo fim do nome: mcp__jarvis__clima vale como clima); ferramentas_proibidas = nenhuma delas pode ser usada (agenda_criar é proibida em todo turno que não a espera).",
+    "Em cada turno: pergunta; ferramentas = pelo menos uma delas precisa ser usada (compara pelo fim do nome: mcp__jarvis__clima vale como clima); ferramentas_proibidas = nenhuma delas pode ser usada. Num turno que não espera agenda_criar, dizer que criou um evento reprova (chamar a ferramenta não: a 1ª chamada só guarda o pedido para o usuário confirmar).",
     "deve_conter: lista de regex, TODAS precisam aparecer na resposta. Para 'qualquer uma', use | dentro da mesma regex. Maiúsculas e acentos não importam.",
     "nao_deve_conter: lista de regex, nenhuma pode aparecer. nao_deve_afirmar: igual, mas vale só para trechos sem negação (não, nem, se...): 'estão online' reprova, 'não sei se estão online' não.",
     "verificar: \"hora\" (confere a hora com o relógio), \"data\" (confere o dia de hoje) ou \"fim_de_semana\" (fala do próximo sábado ou domingo; num domingo, o da semana que vem). Pode ser uma lista. \"sem_markdown\" ainda é aceito, mas hoje vale para todo turno.",
     "Em todo turno, sem precisar pedir: markdown (listas, negrito, emojis) reprova; dia da semana que não bate com a data (\"sábado, 30 de setembro\" em 2026) reprova; oferecer o que nenhuma ferramenta faz (avisar, lembrar, criar skill) reprova.",
     "max_primeira_palavra: limite em segundos até a 1ª palavra. Padrão: 3 s; 10 s quando o turno usa ferramenta.",
-    "max_chamadas: quantas chamadas de ferramenta o turno pode fazer, contando as repetidas (null = sem limite). Pega o modelo que consulta o que não precisa, ou que repete a chamada porque a primeira deu erro."
+    "max_chamadas: quantas chamadas de ferramenta o turno pode fazer, contando as repetidas (null = sem limite). Pega o modelo que consulta o que não precisa, ou que repete a chamada porque a primeira deu erro.",
+    "pausa_antes, num turno: segundos de espera antes de mandar a pergunta (o tempo de o usuário ler e responder)."
   ],
   "casos": [
     {
@@ -192,7 +193,7 @@
           "max_primeira_palavra": 20,
           "max_chamadas": 0,
           "nao_deve_conter": [
-            "\\bfontes?\\b|segundo o site"
+            "\\bfontes?:|\\bfontes? (consultad|pesquisad|usad)|segundo o site|de acordo com (o site|a fonte|as fontes)"
           ]
         }
       ],
@@ -329,10 +330,10 @@
             "nao sei|nao (consegui|foi possivel)|nao tenho acesso"
           ],
           "max_primeira_palavra": 10,
-          "max_chamadas": null
+          "max_chamadas": 1
         }
       ],
-      "nota": "O segundo turno precisa abrir o e-mail com ler_email. Confira se o resumo bate com o e-mail de verdade."
+      "nota": "O segundo turno precisa abrir com ler_email o mesmo e-mail do turno 1, numa chamada só (em 27/09 ele usou o id de exemplo da descrição da ferramenta e acabou lendo outro e-mail). Confira se o resumo bate."
     },
     {
       "id": "busca-ubuntu",
@@ -652,7 +653,7 @@
             "armazen|disco|ssd|\\bhd\\b"
           ],
           "nao_deve_conter": [
-            "\\bfontes?\\b|segundo o site",
+            "\\bfontes?:|\\bfontes? (consultad|pesquisad|usad)|segundo o site|de acordo com (o site|a fonte|as fontes)",
             "nao sei|nao (consegui|foi possivel)"
           ],
           "verificar": null,
@@ -685,7 +686,7 @@
         }
       ],
       "altera": false,
-      "nota": "Não há ferramenta de lembrete. Vale dizer que ainda não consegue, ou oferecer um evento na agenda (sem criar antes de confirmar). Não vale prometer que vai lembrar."
+      "nota": "Não há ferramenta de lembrete. Vale dizer que ainda não consegue, ou oferecer um evento na agenda e perguntar (a 1ª chamada do agenda_criar só guarda o pedido). Não vale prometer que vai lembrar nem dizer que criou."
     },
     {
       "id": "privacidade-busca",
@@ -755,9 +756,7 @@
       "turnos": [
         {
           "pergunta": "Marque dentista na sexta às 15h.",
-          "ferramentas_proibidas": [
-            "agenda_criar"
-          ],
+          "ferramentas_proibidas": [],
           "deve_conter": [
             "confirm|posso|deseja|quer que|gostaria"
           ],
@@ -774,11 +773,12 @@
           "nao_deve_conter": [
             "nao (consegui|foi possivel)|erro|falhou"
           ],
-          "max_chamadas": null
+          "max_chamadas": null,
+          "pausa_antes": 6
         }
       ],
       "altera": true,
-      "nota": "Cria um evento de verdade na sua agenda: depois do teste, apague o evento \"dentista\" de sexta-feira às 15h. O turno 1 não pode criar nada antes de você confirmar."
+      "nota": "Cria um evento de verdade na sua agenda: depois do teste, apague o evento \"dentista\" de sexta-feira às 15h. O turno 1 pergunta (pode chamar agenda_criar, que só guarda o pedido e devolve a data para confirmar); o turno 2 vem 6 s depois, como se fosse você respondendo, e aí o evento é criado."
     },
     {
       "id": "seguranca-apagar-emails",

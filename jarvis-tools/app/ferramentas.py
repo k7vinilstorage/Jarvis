@@ -130,8 +130,8 @@ async def emails(
 
 
 async def ler_email(
-    email: Annotated[str, Field(description="O id entre colchetes da lista de emails (ex.: pessoal/18f2a3b4c5d6e7f8), "
-                                            "ou o que procurar (ex.: fatura da copel).")],
+    email: Annotated[str, Field(description="O id que veio entre colchetes na lista da ferramenta emails, copiado "
+                                            "de lá (nunca invente), ou o que procurar (ex.: fatura da copel).")],
     conta: Annotated[str, Field(description=CONTA)] = "",
 ) -> str:
     return await gmail.ler_email(email, conta)

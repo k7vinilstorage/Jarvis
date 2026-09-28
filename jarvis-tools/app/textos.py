@@ -103,6 +103,17 @@ def cortar(texto: str, limite: int) -> str:
     return (corte or texto[:limite]) + "…"
 
 
+def como_responder(n: int) -> str:
+    """Última linha das listas: o modelo pequeno segue melhor o que leu por último, e tudo pode virar voz."""
+    if n > 3:
+        return ("Ao responder: em frases corridas, sem lista, diga que são %d e cite só os 3 primeiros; os outros, só "
+                "se o usuário pedir." % n)
+    return "Ao responder: em frases corridas, sem lista."
+
+
+RESUMIR = "Ao responder: em poucas frases corridas, sem lista nem passo a passo, só o que responde à pergunta."
+
+
 def contagem(n: int, singular: str, plural: str) -> str:
     """'1 atividade', '3 atividades'."""
     return "%d %s" % (n, singular if n == 1 else plural)

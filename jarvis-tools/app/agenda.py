@@ -6,17 +6,29 @@ import re
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from time import monotonic
 
 from app import google_auth
 from app.google_auth import ErroGoogle
 from app.periodos import PeriodoInvalido, inicio_do_dia, interpretar, rotulo_dia
 from app.textos import (agora as agora_local, as_hora, contagem, das_hora, data_falada, dia_curto, faixa_horas,
-                        fuso, juntar_com_e, maiuscula, normalizar)
+                        como_responder, fuso, juntar_com_e, maiuscula, normalizar)
 
 URL_CALENDARIO = "https://www.googleapis.com/calendar/v3"
 MAX_EVENTOS = 12
 MAX_POR_AGENDA = 50
 DURACAO_MINIMA, DURACAO_MAXIMA = 5, 24 * 60
+
+# Criar evento em dois passos: a 1ª chamada só guarda o pedido; o evento sai quando a mesma chamada volta depois
+# que o usuário confirmou. Encadear as duas no mesmo turno leva 1 a 2 s; uma confirmação de verdade leva mais.
+CONFIRMACAO_MINIMA = 5.0    # segundos
+CONFIRMACAO_MAXIMA = 600.0  # depois disso, pergunta de novo
+_pendentes: dict[tuple, float] = {}
+
+
+def relogio() -> float:
+    return monotonic()
+
 
 AJUDA_HORA = "Use 15h, 15h30 ou 15:30; deixe vazio para um evento de dia todo."
 
@@ -162,7 +174,7 @@ def montar_texto(eventos: list[Evento], periodo, agora: datetime, com_conta: boo
         texto = " ".join(partes)
     if sobra > 0:
         texto += " E mais %s." % contagem(sobra, "evento", "eventos")
-    return texto
+    return texto + ("\n" + como_responder(len(eventos)) if len(eventos) > 3 else "")
 
 
 async def agenda(quando: str = "hoje", conta: str = "", agora: datetime | None = None) -> str:
@@ -225,6 +237,25 @@ async def ja_existe(conta: dict, titulo: str, inicio: datetime, fim: datetime, d
     return False
 
 
+def _confirmacao(rotulo: str, titulo: str, inicio: datetime, fim: datetime, descricao: str) -> str:
+    """Texto vazio = pode criar (o usuário já confirmou); senão, o que o modelo deve fazer antes."""
+    agora = relogio()
+    for chave, quando in list(_pendentes.items()):
+        if agora - quando > CONFIRMACAO_MAXIMA:
+            del _pendentes[chave]
+    chave = (rotulo, normalizar(titulo), inicio.isoformat(), fim.isoformat())
+    pedido = _pendentes.get(chave)
+    if pedido is None:
+        _pendentes[chave] = agora
+        return ("Ainda não criei. Pergunte ao usuário: posso criar %s, na conta %s? Só chame agenda_criar de novo, "
+                "com os mesmos dados, depois que ele disser que sim." % (descricao, rotulo))
+    if agora - pedido < CONFIRMACAO_MINIMA:
+        return ("Ainda não criei: o usuário não confirmou. Pergunte a ele se pode criar %s e espere a resposta."
+                % descricao)
+    del _pendentes[chave]
+    return ""
+
+
 async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 60, conta: str = "",
                 agora: datetime | None = None) -> str:
     agora = agora or agora_local()
@@ -272,6 +303,9 @@ async def criar(titulo: str, data: str, hora: str = "", duracao_minutos: int = 6
     descricao = "%s, %s, %s" % (titulo, data_falada(dia, com_ano=dia.year != agora.year), quando)
     if await ja_existe(escolhida, titulo, inicio, fim, dia_todo=not horario):
         return "Esse evento já existe na conta %s: %s. Não criei outro." % (escolhida["rotulo"], descricao)
+    espera = _confirmacao(escolhida["rotulo"], titulo, inicio, fim, descricao)
+    if espera:
+        return espera
     try:
         await google_auth.chamar(escolhida, "POST", URL_CALENDARIO + "/calendars/primary/events", corpo=corpo)
     except ErroGoogle as erro:

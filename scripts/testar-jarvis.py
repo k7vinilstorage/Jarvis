@@ -37,7 +37,10 @@ CASOS_PADRAO = jc.RAIZ / "testes" / "jarvis-casos.json"
 LIMITE_SIMPLES = 3.0     # segundos até a 1ª palavra numa pergunta sem ferramenta
 LIMITE_FERRAMENTA = 10.0  # ... e numa pergunta que usa ferramenta (várias chamadas: Moodle, e-mail)
 META_LISTA, TOTAL_LISTA = 8, 10
-SEMPRE_PROIBIDAS = ["agenda_criar"]  # criar evento sem o turno pedir é sempre falha
+# Chamar o agenda_criar é o jeito de perguntar (a 1ª chamada só guarda o pedido e devolve a data certa para
+# confirmar); falha é dizer que criou um evento num turno que não pedia isso
+CRIACAO_AFIRMADA = re.compile(r"\b(evento (foi )?criado|criei (o|um|seu) evento|(foi|esta|ficou) (marcado|agendado)|"
+                              r"marquei|agendei)\b")
 VERIFICACOES = ("hora", "data", "sem_markdown", "fim_de_semana")  # sem_markdown: hoje vale para todo turno
 INTEGRACOES = {"moodle": ("Moodle", "Moodle não configurado"),
                "google": ("Google", "Google não configurado"),
@@ -141,6 +144,9 @@ def validar(casos) -> list:
             for v in lista(t, "verificar"):
                 if v not in VERIFICACOES:
                     problemas.append("%s: verificar \"%s\" não existe (use %s)" % (ot, v, ", ".join(VERIFICACOES)))
+            pausa = t.get("pausa_antes")
+            if pausa is not None and (not isinstance(pausa, (int, float)) or isinstance(pausa, bool) or pausa < 0):
+                problemas.append("%s: pausa_antes deve ser um número de segundos" % ot)
             maximo = t.get("max_chamadas")
             if maximo is not None and (not isinstance(maximo, int) or isinstance(maximo, bool) or maximo < 0):
                 problemas.append("%s: max_chamadas deve ser um número inteiro" % ot)
@@ -347,6 +353,16 @@ def datas_incoerentes(texto_norm: str, hoje: date) -> list:
     return [texto for _, texto in sorted(erradas)]  # na ordem em que aparecem
 
 
+def afirma_criacao(texto_norm: str) -> str:
+    """O trecho que diz que um evento foi criado (sem negação: 'não criei o evento' vale)."""
+    for ini, fim in clausulas(texto_norm):
+        clausula = texto_norm[ini:fim]
+        m = CRIACAO_AFIRMADA.search(clausula)
+        if m and not NEGACAO.search(clausula):
+            return clausula.strip()[:80]
+    return ""
+
+
 def promessas(texto_norm: str) -> list:
     return [m.group(0) for p in PROMESSAS for m in [re.search(p, texto_norm)] if m]
 
@@ -358,6 +374,12 @@ def proximo_fim_de_semana(hoje: date) -> tuple:
 
 
 def conferir_fim_de_semana(texto_norm: str, hoje: date) -> bool:
+    """Fala do próximo fim de semana: com as datas certas, ou só "sábado" e "domingo", sem data nenhuma (uma data
+    errada ao lado do dia da semana já reprova pela conferência de datas)."""
+    sem_datas = not re.search(r"(?<!\d)\d{1,2}(?:º|°|o)?\s+de\s+%s\b|(?<!\d)\d{1,2}/\d{1,2}(?!\d)|\bdia \d{1,2}\b"
+                              % _MES, texto_norm)
+    if sem_datas and re.search(r"\b(sabado|domingo)\b", texto_norm):
+        return True
     for d in proximo_fim_de_semana(hoje):
         if re.search(r"(?<!\d)0?%d(?:º|°|o)?\s+de\s+%s\b" % (d.day, MESES[d.month - 1]), texto_norm) or \
                 re.search(r"(?<!\d)0?%d/0?%d(?!\d)" % (d.day, d.month), texto_norm) or \
@@ -389,7 +411,6 @@ def avaliar(ctx: Contexto, caso: dict, turno: dict, r: dict, antes, depois):
         falhas.append(motivo)
 
     proibidas = lista(turno, "ferramentas_proibidas")
-    proibidas += [p for p in SEMPRE_PROIBIDAS if p not in proibidas and not any(jc.ferramenta_bate(p, e) for e in esperadas)]
     for u in unicos(usadas):
         if any(jc.ferramenta_bate(u, p) for p in proibidas):
             falhas.append("usou ferramenta proibida: %s" % jc.nome_curto(u))
@@ -436,6 +457,10 @@ def avaliar(ctx: Contexto, caso: dict, turno: dict, r: dict, antes, depois):
             falhas.append("formato ruim para voz: %s" % ", ".join(md))
         for errada in datas_incoerentes(norm, antes.date()):
             falhas.append("dia da semana errado: %s" % errada)
+        if not any(jc.ferramenta_bate("agenda_criar", e) for e in esperadas):
+            criou = afirma_criacao(norm)
+            if criou:
+                falhas.append("disse que criou um evento sem o usuário confirmar: \"%s\"" % criou)
         for promessa in promessas(norm):
             falhas.append("ofereceu o que nenhuma ferramenta faz: \"%s\"" % promessa)
 
@@ -465,6 +490,8 @@ def rodar_caso(ctx: Contexto, caso: dict) -> dict:
     varios = len(caso["turnos"]) > 1
     for i, turno in enumerate(caso["turnos"], 1):
         prefixo = ("turno %d: " % i) if varios else ""
+        if turno.get("pausa_antes"):
+            time.sleep(turno["pausa_antes"])  # o tempo de o usuário ler e responder
         mensagens.append({"role": "user", "content": turno["pergunta"]})
         antes = jc.agora_local(ctx.fuso)
         r = jc.conversar(ctx.url, ctx.chave, mensagens, timeout=ctx.timeout)

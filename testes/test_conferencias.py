@@ -56,7 +56,10 @@ class TesteDatas(unittest.TestCase):
         self.assertTrue(tj.conferir_fim_de_semana(norm("No sábado, 3 de outubro, sol."), DOMINGO))
         self.assertTrue(tj.conferir_fim_de_semana(norm("Domingo, 04/10, chuva."), DOMINGO))
         self.assertFalse(tj.conferir_fim_de_semana(norm("dia 30 de setembro, sábado, nublado"), DOMINGO))
-        self.assertFalse(tj.conferir_fim_de_semana(norm("sábado e domingo com sol"), DOMINGO))
+        # Sem data nenhuma, só "sábado" e "domingo", está certo (em 27/09 às 23h25 isso reprovava à toa)
+        self.assertTrue(tj.conferir_fim_de_semana(norm("No fim de semana: sábado, nublado; domingo, chuva forte."),
+                                                  DOMINGO))
+        self.assertFalse(tj.conferir_fim_de_semana(norm("Sábado, 26 de setembro, sol."), DOMINGO))  # o que passou
 
 
 class TestePromessas(unittest.TestCase):
@@ -76,6 +79,31 @@ class TestePromessas(unittest.TestCase):
             self.assertEqual(tj.promessas(norm(resposta)), [], resposta)
 
 
+class TesteCriacao(unittest.TestCase):
+    def test_afirmou_que_criou(self):
+        # O caso lembrete de 27/09 às 23h25: criou o evento sem perguntar
+        self.assertIn("evento criado", tj.afirma_criacao(norm(
+            'Evento criado na sua agenda pessoal: "Lembrar de estudar", quinta-feira, 1º de outubro, das 8h às 9h.')))
+        self.assertTrue(tj.afirma_criacao(norm("Pronto, marquei dentista na sexta às 15h.")))
+
+    def test_perguntar_ou_negar_vale(self):
+        for resposta in ("Posso criar o evento Estudar, segunda-feira, 28 de setembro, às 8h?",
+                         "Ainda não criei o evento: você confirma?",
+                         "Não tenho lembretes. Se quiser, marco um evento na agenda."):
+            self.assertEqual(tj.afirma_criacao(norm(resposta)), "", resposta)
+
+
+class TesteFontes(unittest.TestCase):
+    def test_fonte_so_quando_cita_fontes(self):
+        casos = {c["id"]: c for c in json.loads((RAIZ / "testes" / "jarvis-casos.json").read_text(encoding="utf-8"))
+                 ["casos"]}
+        padrao = [p for p in casos["webhook"]["turnos"][0]["nao_deve_conter"] if "fonte" in p][0]
+        # webhook com 0,3 em 27/09: "consultar a fonte" reprovou à toa
+        self.assertIsNone(tj.buscar(padrao, norm("sem você precisar consultar constantemente a fonte")))
+        self.assertTrue(tj.buscar(padrao, norm("Fontes: Alura e Red Hat.")))
+        self.assertTrue(tj.buscar(padrao, norm("De acordo com o site da Red Hat, ...")))
+
+
 class TesteMarkdown(unittest.TestCase):
     def test_do_relatorio(self):
         self.assertTrue(jc.detectar_markdown("O lançamento mais recente é o **Ubuntu 26.04 LTS**."))
@@ -87,6 +115,10 @@ class TesteCasos(unittest.TestCase):
     def test_arquivo_de_casos_valido(self):
         dados = json.loads((RAIZ / "testes" / "jarvis-casos.json").read_text(encoding="utf-8"))
         self.assertEqual(tj.validar(dados["casos"]), [])
+
+    def test_pausa_invalida(self):
+        casos = [{"id": "x", "turnos": [{"pergunta": "oi", "pausa_antes": "5"}]}]
+        self.assertIn("pausa_antes", tj.validar(casos)[0])
 
     def test_max_chamadas_invalido(self):
         casos = [{"id": "x", "turnos": [{"pergunta": "oi", "max_chamadas": "2"}]}]

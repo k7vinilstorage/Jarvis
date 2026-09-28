@@ -29,7 +29,9 @@ PC ou ESP32 --WebSocket 10800 (token)--> jarvis-voz --> Whisper (Wyoming, CPU)
    - ferramentas: "fim de semana" num domingo = o próximo (o clima misturava hoje com o sábado seguinte); "próximas semanas" = 30 dias (dava erro); `buscar` recusa o nome e o e-mail do usuário (`JARVIS_TERMOS_PRIVADOS` e as contas Google) e termina com um lembrete de citar site e data;
    - SOUL: conhecimento geral sem busca, uma ferramenta por pergunta, nada de oferecer o que nenhuma ferramenta faz, nome do usuário só de vez em quando, dia da semana sempre o da ferramenta;
    - testador: markdown reprova sempre; dia da semana incoerente com a data e promessas sem ferramenta reprovam em todo turno; `max_chamadas` e `verificar: fim_de_semana`; 3 casos novos (33 no total). Testes das conferências em `testes/test_conferencias.py`.
-   Falta: o usuário rodar no servidor e comparar, depois medir temperatura 0,5 contra 0,3.
+   2ª rodada (23h25): 0,3 não ajudou, fica 0,5. Corrigidos a criação de evento sem confirmar (`agenda_criar` em dois passos), códigos de e-mail lidos em voz alta, o id de exemplo do `ler_email`, provas e tarefas duplicadas do Moodle, e listas longas ("Ao responder:" no fim das ferramentas). Detalhes em `docs/plano.md`.
+   - Acesso: o PC do usuário entra no servidor por SSH com chave, pelo Tailscale (o endereço fica fora do repositório, que é público). O servidor só recebe mudanças por `git pull`; nunca `git add`/`commit` lá.
+   Falta: medir no servidor; depois testar `presence_penalty` 0 (suspeita dos nomes estropiados).
 5. **Por último: Honcho** (memória de longo prazo, `docs/honcho.md`), medindo com e sem ele. Ligar junto o `VOZ_SESSAO_HERMES`.
 6. Fase 4: wake word, rotinas, barge-in.
 

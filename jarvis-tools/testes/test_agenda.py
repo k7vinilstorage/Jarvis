@@ -67,7 +67,10 @@ class BaseAgenda(unittest.TestCase):
         google_auth.esquecer_tokens()
 
     def ler(self, quando="hoje", conta=""):
-        return asyncio.run(agenda.agenda(quando, conta, agora=AGORA))
+        texto = asyncio.run(agenda.agenda(quando, conta, agora=AGORA))
+        corpo, _, ultima = texto.rpartition("\n")
+        self.orientacao = ultima if ultima.startswith("Ao responder:") else ""
+        return corpo if self.orientacao else texto
 
 
 class TesteLeitura(BaseAgenda):
@@ -96,6 +99,8 @@ class TesteLeitura(BaseAgenda):
 
     def test_semana_agrupada(self):
         texto = self.ler("semana", "pessoal")
+        self.assertEqual(self.orientacao, "Ao responder: em frases corridas, sem lista, diga que são 5 e cite só os 3 "
+                                          "primeiros; os outros, só se o usuário pedir.")
         self.assertEqual(texto, "Agenda até quinta-feira, 1º de outubro, com 5 eventos. "
                                 "Hoje, quinta-feira, 24 de setembro: das 9h às 10h, Reunião do projeto; das 19h às 20h, "
                                 "Academia. Dia todo: Aniversário da Ana. "
@@ -141,8 +146,48 @@ class TesteLeitura(BaseAgenda):
 
 
 class TesteCriacao(BaseAgenda):
-    def criar(self, *args, **kwargs):
+    def setUp(self):
+        super().setUp()
+        agenda._pendentes.clear()
+        self.segundos = 1000.0
+        remendo = mock.patch.object(agenda, "relogio", lambda: self.segundos)
+        remendo.start()
+        self.addCleanup(remendo.stop)
+
+    def pedir(self, *args, **kwargs):
         return asyncio.run(agenda.criar(*args, agora=AGORA, **kwargs))
+
+    def criar(self, *args, **kwargs):
+        """Como no uso de verdade: pede, o usuário confirma (alguns segundos depois) e pede de novo."""
+        primeira = self.pedir(*args, **kwargs)
+        if not primeira.startswith("Ainda não criei"):
+            return primeira
+        self.segundos += 20
+        return self.pedir(*args, **kwargs)
+
+    def test_so_cria_depois_da_confirmacao(self):
+        # Em 27/09 o modelo criou um evento sem perguntar: agora a 1ª chamada só guarda o pedido
+        with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
+            texto = self.pedir("Estudar", "amanhã", "8h")
+            self.assertEqual(texto, "Ainda não criei. Pergunte ao usuário: posso criar Estudar, sexta-feira, 25 de "
+                                    "setembro, das 8h às 9h, na conta pessoal? Só chame agenda_criar de novo, com os "
+                                    "mesmos dados, depois que ele disser que sim.")
+            self.segundos += 1.5  # encadeou no mesmo turno, sem o usuário responder
+            self.assertIn("o usuário não confirmou", self.pedir("Estudar", "amanhã", "8h"))
+            self.assertEqual(self.google.criados, [])
+            self.segundos += 5  # o usuário respondeu "sim"
+            self.assertEqual(self.pedir("estudar", "25/09", "08:00"),
+                             "Evento criado na conta pessoal: estudar, sexta-feira, 25 de setembro, das 8h às 9h.")
+            self.assertEqual(len(self.google.criados), 1)
+
+    def test_outro_evento_ou_pedido_velho_pergunta_de_novo(self):
+        with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
+            self.pedir("Estudar", "amanhã", "8h")
+            self.segundos += 20
+            self.assertTrue(self.pedir("Estudar", "amanhã", "9h").startswith("Ainda não criei"))  # outra hora
+            self.segundos += 601
+            self.assertTrue(self.pedir("Estudar", "amanhã", "8h").startswith("Ainda não criei"))  # passou de 10 min
+            self.assertEqual(self.google.criados, [])
 
     def test_evento_com_hora(self):
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
