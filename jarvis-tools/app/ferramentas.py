@@ -113,22 +113,19 @@ async def agenda(
 
 async def agenda_criar(
     titulo: Annotated[str, Field(description="Título curto do evento.")],
-    data: Annotated[str, Field(description="Um dia: hoje, amanhã, um dia da semana ou uma data (26/09).")],
+    data: Annotated[str, Field(description="O dia (o primeiro, se o evento se repete): hoje, amanhã, um dia da "
+                                           "semana ou uma data (26/09). O fim de uma repetição vai em repetir.")],
     hora: Annotated[str, Field(description="Início: 15h, 15h30 ou 15:30. Vazio = dia todo.")] = "",
     duracao_minutos: Annotated[int, Field(description="Duração em minutos.")] = 60,
     conta: Annotated[str, Field(description="Rótulo ou e-mail da conta Google. Vazio = a padrão.")] = "",
     repetir: Annotated[str, Field(description="Se o evento se repete, como o usuário falou: toda terça, toda segunda "
                                               "e quarta, todo dia, dias úteis, a cada 2 semanas, todo mês; e o fim, "
                                               "se disser (até 15/12, 10 vezes). Vazio = não repete.")] = "",
-    resposta_do_usuario: Annotated[str, Field(description=RESPOSTA)] = "",
 ) -> str:
-    return await agenda_google.criar(titulo, data, hora, duracao_minutos, conta, repetir=repetir,
-                                     resposta_do_usuario=resposta_do_usuario)
+    return await agenda_google.criar(titulo, data, hora, duracao_minutos, conta, repetir=repetir)
 
 
 EVENTO = "Título do evento como o usuário falou, ou parte dele (ex.: inglês, dentista)."
-RESPOSTA = ("Só na segunda chamada, depois de perguntar: o que o usuário respondeu, com as palavras dele (ex.: sim, "
-            "pode). Vazio na primeira chamada.")
 QUANDO_EVENTO = ("O dia do evento, se o usuário disse (terça, 13/10): acha a ocorrência certa. Vazio = os próximos "
                  "60 dias.")
 ALCANCE = ("Num evento que se repete: esta (só esta ocorrência), proximas (esta e as próximas) ou todas. Vazio = a "
@@ -144,10 +141,9 @@ async def agenda_alterar(
     nova_hora: Annotated[str, Field(description="Novo horário de início (15h, 15h30). Vazio = não muda.")] = "",
     nova_duracao_minutos: Annotated[int, Field(description="Nova duração em minutos. 0 = não muda.")] = 0,
     conta: Annotated[str, Field(description=CONTA)] = "",
-    resposta_do_usuario: Annotated[str, Field(description=RESPOSTA)] = "",
 ) -> str:
     return await agenda_mudancas.alterar(evento, quando, alcance, novo_titulo, nova_data, nova_hora,
-                                         nova_duracao_minutos, conta, resposta_do_usuario)
+                                         nova_duracao_minutos, conta)
 
 
 async def agenda_apagar(
@@ -155,15 +151,19 @@ async def agenda_apagar(
     quando: Annotated[str, Field(description=QUANDO_EVENTO)] = "",
     alcance: Annotated[str, Field(description=ALCANCE)] = "",
     conta: Annotated[str, Field(description=CONTA)] = "",
-    resposta_do_usuario: Annotated[str, Field(description=RESPOSTA)] = "",
 ) -> str:
-    return await agenda_mudancas.apagar(evento, quando, alcance, conta, resposta_do_usuario)
+    return await agenda_mudancas.apagar(evento, quando, alcance, conta)
 
 
-async def agenda_desfazer(
-    resposta_do_usuario: Annotated[str, Field(description=RESPOSTA)] = "",
+async def agenda_desfazer() -> str:
+    return await agenda_mudancas.desfazer()
+
+
+async def agenda_confirmar(
+    resposta_do_usuario: Annotated[str, Field(description="O que o usuário respondeu à sua pergunta, com as palavras "
+                                                          "dele (ex.: sim, pode marcar).")],
 ) -> str:
-    return await agenda_mudancas.desfazer(resposta_do_usuario)
+    return await agenda_google.confirmar_proposta(resposta_do_usuario)
 
 
 async def emails(
@@ -205,19 +205,20 @@ FERRAMENTAS = [
                "já foi entregue e nota.", CONSULTA, "moodle"),
     Ferramenta("agenda", agenda, "Compromissos do Google Agenda. Não é para atividades e entregas da faculdade: "
                "isso é moodle_prazos.", CONSULTA, "google"),
-    Ferramenta("agenda_criar", agenda_criar, "Cria um evento no Google Agenda, em dois passos: a 1ª chamada não "
-               "cria nada e devolve o dia e a hora para você confirmar com o usuário; depois do sim dele, chame de novo "
-               "com os mesmos dados e a resposta dele em resposta_do_usuario.", CRIACAO, "google"),
-    Ferramenta("agenda_alterar", agenda_alterar, "Muda o título, o dia, a hora ou a duração de um evento do "
-               "Google Agenda, inclusive de um que se repete. Em dois passos: a 1ª chamada não muda nada e devolve o "
-               "que vai mudar para você confirmar com o usuário; depois do sim dele, chame de novo com os mesmos "
-               "dados e a resposta dele em resposta_do_usuario.", MUDANCA, "google"),
-    Ferramenta("agenda_apagar", agenda_apagar, "Apaga um evento do Google Agenda, inclusive de um que se repete. Em "
-               "dois passos: a 1ª chamada não apaga nada e devolve o que vai apagar para você confirmar com o "
-               "usuário; depois do sim dele, chame de novo com os mesmos dados e a resposta dele em "
-               "resposta_do_usuario.", MUDANCA, "google"),
-    Ferramenta("agenda_desfazer", agenda_desfazer, "Desfaz a última mudança que você fez na agenda (até 24 horas). "
-               "Em dois passos, como as outras.", MUDANCA, "google"),
+    Ferramenta("agenda_criar", agenda_criar, "Propõe um evento no Google Agenda (que pode se repetir). Não cria "
+               "nada: devolve a pergunta para você fazer ao usuário. Se ele disser que sim, chame agenda_confirmar.",
+               CRIACAO, "google"),
+    Ferramenta("agenda_alterar", agenda_alterar, "Propõe mudar o título, o dia, a hora ou a duração de um evento do "
+               "Google Agenda, inclusive de um que se repete. Não muda nada: devolve a pergunta para você fazer ao "
+               "usuário. Se ele disser que sim, chame agenda_confirmar.", MUDANCA, "google"),
+    Ferramenta("agenda_apagar", agenda_apagar, "Propõe apagar um evento do Google Agenda, inclusive de um que se "
+               "repete. Não apaga nada: devolve a pergunta para você fazer ao usuário. Se ele disser que sim, chame "
+               "agenda_confirmar.", MUDANCA, "google"),
+    Ferramenta("agenda_desfazer", agenda_desfazer, "Propõe desfazer a última mudança que você fez na agenda (até 24 "
+               "horas). Se o usuário disser que sim, chame agenda_confirmar.", MUDANCA, "google"),
+    Ferramenta("agenda_confirmar", agenda_confirmar, "Faz o que agenda_criar, agenda_alterar, agenda_apagar ou "
+               "agenda_desfazer propôs, depois que o usuário respondeu que sim. Nunca chame antes da resposta dele.",
+               MUDANCA, "google"),
     Ferramenta("emails", emails, "Lista os e-mails do Gmail, dos mais novos para os mais antigos: remetente, "
                "assunto, trecho e id.", CONSULTA, "google"),
     Ferramenta("ler_email", ler_email, "Lê um e-mail inteiro do Gmail, pelo id da lista de emails ou por uma busca.",

@@ -148,7 +148,7 @@ class TesteLeitura(BaseAgenda):
 class TesteCriacao(BaseAgenda):
     def setUp(self):
         super().setUp()
-        agenda._pendentes.clear()
+        agenda._proposta = None
         self.segundos = 1000.0
         remendo = mock.patch.object(agenda, "relogio", lambda: self.segundos)
         remendo.start()
@@ -157,52 +157,57 @@ class TesteCriacao(BaseAgenda):
     def pedir(self, *args, **kwargs):
         return asyncio.run(agenda.criar(*args, agora=AGORA, **kwargs))
 
+    def confirmar(self, resposta):
+        return asyncio.run(agenda.confirmar_proposta(resposta))
+
     def criar(self, *args, **kwargs):
-        """Como no uso de verdade: pede, o usuário confirma (alguns segundos depois) e pede de novo com a resposta."""
+        """Como no uso de verdade: propõe, o usuário responde (alguns segundos depois) e agenda_confirmar faz."""
         primeira = self.pedir(*args, **kwargs)
-        if not primeira.startswith("Ainda não criei"):
+        if not primeira.startswith("Ainda não fiz nada"):
             return primeira
         self.segundos += 20
-        return self.pedir(*args, resposta_do_usuario="sim, pode", **kwargs)
+        return self.confirmar("sim, pode")
 
     def test_so_cria_depois_da_confirmacao(self):
-        # Em 27/09 o modelo criou um evento sem perguntar: agora a 1ª chamada só guarda o pedido
+        # 27/09: criou sem perguntar. 28/09, no servidor: repetindo a mesma chamada, o modelo a repetiu no mesmo turno
+        # 9,7 s depois e o evento saiu sem o "sim". Agora agenda_criar só propõe; quem faz é agenda_confirmar.
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
             texto = self.pedir("Estudar", "amanhã", "8h")
-            self.assertEqual(texto, 'Ainda não criei. Pergunte ao usuário, com estas palavras: "Posso criar Estudar, '
+            self.assertEqual(texto, 'Ainda não fiz nada. Pergunte ao usuário, com estas palavras: "Posso criar Estudar, '
                                     'sexta-feira, 25 de setembro, das 8h às 9h, na conta pessoal?" Se ele disser que '
-                                    "sim, chame agenda_criar de novo com os mesmos dados e com a resposta dele em "
-                                    "resposta_do_usuario.")
-            # 28/09, no servidor: o modelo repetiu a chamada no mesmo turno 9,7 s depois, e o evento saiu sem o "sim"
+                                    "sim, chame agenda_confirmar com a resposta dele.")
             self.segundos += 9.7
-            self.assertIn("falta a resposta do usuário", self.pedir("Estudar", "amanhã", "8h"))
-            self.assertIn("falta a resposta do usuário", self.pedir("Estudar", "amanhã", "8h",
-                                                                    resposta_do_usuario="sim"))  # rápido demais
+            self.assertTrue(self.pedir("Estudar", "amanhã", "8h").startswith("Ainda não fiz nada"))  # repetir não faz
+            self.segundos += 9.7
+            self.assertIn("falta a resposta do usuário", self.confirmar("sim"))  # rápido demais
+            self.segundos += 10
+            self.assertIn("falta a resposta do usuário", self.confirmar(""))
             self.assertEqual(self.google.criados, [])
-            self.segundos += 10  # o usuário respondeu
-            self.assertEqual(self.pedir("estudar", "25/09", "08:00", resposta_do_usuario="Sim, pode marcar."),
-                             "Evento criado na conta pessoal: estudar, sexta-feira, 25 de setembro, das 8h às 9h.")
+            self.assertEqual(self.confirmar("Sim, pode marcar."),
+                             "Evento criado na conta pessoal: Estudar, sexta-feira, 25 de setembro, das 8h às 9h.")
             self.assertEqual(len(self.google.criados), 1)
+            self.assertIn("Não há nada esperando confirmação", self.confirmar("sim"))  # não cria duas vezes
 
     def test_nao_do_usuario_cancela(self):
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
             self.pedir("Estudar", "amanhã", "8h")
             self.segundos += 20
-            self.assertEqual(self.pedir("Estudar", "amanhã", "8h", resposta_do_usuario="não, espera"),
-                             "Não criei, porque o usuário não confirmou. Diga isso a ele em uma frase.")
+            self.assertEqual(self.confirmar("não, espera"), "Cancelado: não criei Estudar, sexta-feira, 25 de setembro, "
+                                                            "das 8h às 9h. Diga isso ao usuário em uma frase.")
             self.segundos += 20
-            self.assertTrue(self.pedir("Estudar", "amanhã", "8h", resposta_do_usuario="sim").startswith(
-                "Ainda não criei."))  # o pedido foi cancelado: começa de novo
+            self.assertIn("Não há nada esperando confirmação", self.confirmar("sim"))
             self.assertEqual(self.google.criados, [])
 
-    def test_outro_evento_ou_pedido_velho_pergunta_de_novo(self):
+    def test_a_proposta_nova_substitui_e_a_velha_vence(self):
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):
             self.pedir("Estudar", "amanhã", "8h")
+            self.pedir("Estudar", "amanhã", "9h")  # o usuário corrigiu a hora
             self.segundos += 20
-            self.assertTrue(self.pedir("Estudar", "amanhã", "9h").startswith("Ainda não criei"))  # outra hora
+            self.assertIn("das 9h às 10h", self.confirmar("sim"))
+            self.pedir("Correr", "amanhã", "7h")
             self.segundos += 601
-            self.assertTrue(self.pedir("Estudar", "amanhã", "8h").startswith("Ainda não criei"))  # passou de 10 min
-            self.assertEqual(self.google.criados, [])
+            self.assertIn("Não há nada esperando confirmação", self.confirmar("sim"))  # passou de 10 min
+            self.assertEqual(len(self.google.criados), 1)
 
     def test_evento_com_hora(self):
         with mock.patch.dict(os.environ, {"GOOGLE_CONTA_PADRAO": "pessoal"}):

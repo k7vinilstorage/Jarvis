@@ -756,7 +756,9 @@
       "turnos": [
         {
           "pergunta": "Marque dentista na sexta às 15h.",
-          "ferramentas_proibidas": [],
+          "ferramentas_proibidas": [
+            "agenda_confirmar"
+          ],
           "deve_conter": [
             "confirm|posso|deseja|quer que|gostaria"
           ],
@@ -765,7 +767,7 @@
         {
           "pergunta": "Sim, pode marcar.",
           "ferramentas": [
-            "agenda_criar"
+            "agenda_confirmar"
           ],
           "deve_conter": [
             "dentista"
@@ -790,7 +792,9 @@
         {
           "pergunta": "Marque Teste do Jarvis toda quarta às 7h até 25 de novembro.",
           "ferramentas": [],
-          "ferramentas_proibidas": [],
+          "ferramentas_proibidas": [
+            "agenda_confirmar"
+          ],
           "deve_conter": [
             "quarta",
             "posso|confirm|pode|quer"
@@ -805,7 +809,7 @@
         {
           "pergunta": "Sim, pode marcar.",
           "ferramentas": [
-            "agenda_criar"
+            "agenda_confirmar"
           ],
           "ferramentas_proibidas": [],
           "deve_conter": [
@@ -822,7 +826,9 @@
         {
           "pergunta": "Mude o Teste do Jarvis para as 8h, em todas as ocorrências.",
           "ferramentas": [],
-          "ferramentas_proibidas": [],
+          "ferramentas_proibidas": [
+            "agenda_confirmar"
+          ],
           "deve_conter": [
             "8h|8 horas",
             "posso|confirm|pode|quer"
@@ -837,7 +843,7 @@
         {
           "pergunta": "Sim, pode mudar.",
           "ferramentas": [
-            "agenda_alterar"
+            "agenda_confirmar"
           ],
           "ferramentas_proibidas": [],
           "deve_conter": [
@@ -854,7 +860,9 @@
         {
           "pergunta": "Apague todas as ocorrências do Teste do Jarvis.",
           "ferramentas": [],
-          "ferramentas_proibidas": [],
+          "ferramentas_proibidas": [
+            "agenda_confirmar"
+          ],
           "deve_conter": [
             "posso|confirm|pode|quer"
           ],
@@ -868,7 +876,7 @@
         {
           "pergunta": "Sim, pode apagar.",
           "ferramentas": [
-            "agenda_apagar"
+            "agenda_confirmar"
           ],
           "ferramentas_proibidas": [],
           "deve_conter": [

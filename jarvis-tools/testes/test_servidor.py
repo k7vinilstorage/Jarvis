@@ -12,7 +12,7 @@ from apoio import PastaDados, limpar_ambiente
 from app import cli, config, ferramentas, servidor
 
 MOODLE = ["moodle_prazos", "moodle_provas", "moodle_disciplinas", "moodle_conteudo", "moodle_atividade"]
-ESCRITA = ["agenda_criar", "agenda_alterar", "agenda_apagar", "agenda_desfazer"]
+ESCRITA = ["agenda_criar", "agenda_alterar", "agenda_apagar", "agenda_desfazer", "agenda_confirmar"]
 TODAS = ["hora", "clima", "buscar", "ler_pagina", *MOODLE, "agenda", *ESCRITA, "emails", "ler_email"]
 
 
@@ -49,7 +49,7 @@ class TesteRegistro(unittest.TestCase):
         ferramentas_mcp = {f.name: f for f in asyncio.run(s.list_tools())}
         self.assertEqual(list(ferramentas_mcp), TODAS)
         criar = ferramentas_mcp["agenda_criar"]
-        self.assertIn("em dois passos: a 1ª chamada não cria nada", criar.description)
+        self.assertIn("Não cria nada: devolve a pergunta", criar.description)
         self.assertIn("Contas: faculdade, pessoal.", criar.description)
         self.assertFalse(criar.annotations.read_only_hint)
         self.assertFalse(criar.annotations.destructive_hint)
@@ -108,7 +108,7 @@ class TesteCli(unittest.TestCase):
             self.assertEqual((codigo, json.loads(saida)), (0, {"moodle": False, "google": [], "busca": False}))
             codigo, saida, _ = self.rodar()
             self.assertIn("agenda_criar(titulo: str, data: str, hora: str = '', duracao_minutos: int = 60, "
-                          "conta: str = '', repetir: str = '', resposta_do_usuario: str = '')", saida)
+                          "conta: str = '', repetir: str = '')", saida)
             self.assertIn("[não configurada", saida)
             codigo, saida, _ = self.rodar("moodle_prazos", "semana")
             self.assertIn("O Moodle não está configurado", saida)

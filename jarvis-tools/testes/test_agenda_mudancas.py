@@ -29,7 +29,7 @@ class BaseMudancas(BaseAgenda):
         pessoal["eventos"]["ana@gmail.com"] += [ocorrencia(d) for d in terças] + [
             evento("conv", "Reunião do grupo", "2026-09-30T10:00:00-03:00", "2026-09-30T11:00:00-03:00",
                    organizer={"email": "prof@exemplo.com"})]
-        agenda._pendentes.clear()
+        agenda._proposta = None
         self.segundos = 1000.0
         remendo = mock.patch.object(agenda, "relogio", lambda: self.segundos)
         remendo.start()
@@ -41,29 +41,28 @@ class BaseMudancas(BaseAgenda):
     def confirmado(self, funcao, *args, **kwargs):
         """Como no uso: a 1ª chamada pergunta; o usuário responde (20 s depois) e a mesma chamada faz."""
         primeira = self.rodar(funcao, *args, **kwargs)
-        self.assertTrue(primeira.startswith("Ainda não"), primeira)
+        self.assertTrue(primeira.startswith("Ainda não fiz nada"), primeira)
         self.assertEqual(self.google.mudancas, [])  # nada mudou antes do sim
         self.segundos += 20
-        return self.rodar(funcao, *args, resposta_do_usuario="sim, pode", **kwargs)
+        return asyncio.run(agenda.confirmar_proposta("sim, pode"))
 
     def desfazer(self):
         primeira = asyncio.run(mud.desfazer())
-        self.assertTrue(primeira.startswith("Ainda não desfiz"), primeira)
+        self.assertTrue(primeira.startswith("Ainda não fiz nada"), primeira)
         self.segundos += 20
-        return asyncio.run(mud.desfazer("sim"))
+        return asyncio.run(agenda.confirmar_proposta("sim"))
 
 
 class TesteApagar(BaseMudancas):
     def test_avulso_em_dois_passos_e_desfazer(self):
         primeira = self.rodar(mud.apagar, "dentista")
-        self.assertEqual(primeira, 'Ainda não apaguei. Pergunte ao usuário, com estas palavras: "Posso apagar '
+        self.assertEqual(primeira, 'Ainda não fiz nada. Pergunte ao usuário, com estas palavras: "Posso apagar '
                                    '"Dentista", sexta-feira, 25 de setembro, das 15h às 16h, na conta pessoal?" Se ele '
-                                   "disser que sim, chame agenda_apagar de novo com os mesmos dados e com a resposta "
-                                   "dele em resposta_do_usuario.")
-        self.segundos += 1.5  # encadeou no mesmo turno
-        self.assertIn("falta a resposta do usuário", self.rodar(mud.apagar, "dentista"))
+                                   "disser que sim, chame agenda_confirmar com a resposta dele.")
+        self.segundos += 1.5  # o modelo confirmou no mesmo turno, sem o usuário responder
+        self.assertIn("falta a resposta do usuário", asyncio.run(agenda.confirmar_proposta("sim")))
         self.segundos += 20
-        self.assertEqual(self.rodar(mud.apagar, "dentista", resposta_do_usuario="pode apagar"),
+        self.assertEqual(asyncio.run(agenda.confirmar_proposta("pode apagar")),
                          'Apagado na conta pessoal: "Dentista", sexta-feira, 25 de setembro, das 15h às 16h. Dá para '
                          "desfazer em até 24 horas.")
         self.assertEqual(self.google.mudancas, [("DELETE", "ana@gmail.com", "e5", None)])

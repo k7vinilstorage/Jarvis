@@ -2,7 +2,7 @@
 
 - O evento é achado pela descrição (título e, se quiser, o dia): o id de uma resposta anterior não fica na conversa.
 - Numa série, o alcance é "esta" (só a ocorrência), "proximas" (esta e as próximas) ou "todas".
-- Tudo em dois passos (agenda.confirmar): a 1ª chamada só descreve o que vai fazer.
+- Tudo em dois passos: estas funções só propõem (agenda.propor); quem faz é agenda_confirmar.
 - Convites (o organizador é outra pessoa) não são mexidos.
 - Antes de mudar, guarda como desfazer (data/agenda-lixeira.json); agenda_desfazer vale por 24 horas.
 """
@@ -15,8 +15,8 @@ from datetime import date, datetime, time, timedelta
 
 from app import agenda as agenda_google
 from app import config, google_auth
-from app.agenda import (AJUDA_HORA, DURACAO_MAXIMA, DURACAO_MINIMA, _instante, _rfc3339, confirmar,
-                        interpretar_hora)
+from app.agenda import (AJUDA_HORA, DURACAO_MAXIMA, DURACAO_MINIMA, _instante, _rfc3339, interpretar_hora,
+                        propor)
 from app.google_auth import ErroGoogle
 from app.periodos import PeriodoInvalido, inicio_do_dia, interpretar
 from app.recorrencia import com_vezes, cortar_regra, descrever_regra, partes_da_regra
@@ -225,7 +225,7 @@ def _pergunta_alcance(acao: str, a: Achado, regra: str, hoje: date) -> str:
 
 # ---------------------------------------------------------------- apagar
 
-async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = "", resposta_do_usuario: str = "",
+async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = "",
                  agora: datetime | None = None) -> str:
     agora = agora or agora_local()
     hoje = agora.date()
@@ -266,16 +266,19 @@ async def apagar(evento: str, quando: str = "", alcance: str = "", conta: str = 
             original = list(mestre.get("recurrence") or [])
             passos = [["PATCH", alvo.agenda, mestre["id"], {"recurrence": cortar_regra(original, corte, alvo.dia_todo)}]]
             desfazer = [["PATCH", alvo.agenda, mestre["id"], {"recurrence": original}]]
-        rotulo = alvo.conta["rotulo"]
-        espera = confirmar(("apagar", rotulo, alvo.item.get("id"), escolha), resposta_do_usuario,
-                           "Posso apagar %s, na conta %s?" % (descricao, rotulo), "agenda_apagar", "apaguei")
-        if espera:
-            return espera
-        await _executar(alvo.conta, passos)
     except ErroGoogle as erro:
         return "Não consegui mexer na agenda: %s." % erro
-    _guardar(rotulo, "apagou " + descricao, desfazer)
-    return "Apagado na conta %s: %s. Dá para desfazer em até 24 horas." % (rotulo, descricao)
+    rotulo, conta_alvo = alvo.conta["rotulo"], alvo.conta
+
+    async def executar() -> str:
+        try:
+            await _executar(conta_alvo, passos)
+        except ErroGoogle as erro:
+            return "Não consegui apagar: %s." % erro
+        _guardar(rotulo, "apagou " + descricao, desfazer)
+        return "Apagado na conta %s: %s. Dá para desfazer em até 24 horas." % (rotulo, descricao)
+
+    return propor("Posso apagar %s, na conta %s?" % (descricao, rotulo), "não apaguei " + descricao, executar)
 
 
 # ---------------------------------------------------------------- alterar
@@ -297,7 +300,7 @@ def _novo_horario(base_dia: date, inicio: datetime, fim: datetime, dia_todo: boo
 
 
 async def alterar(evento: str, quando: str = "", alcance: str = "", novo_titulo: str = "", nova_data: str = "",
-                  nova_hora: str = "", nova_duracao_minutos: int = 0, conta: str = "", resposta_do_usuario: str = "",
+                  nova_hora: str = "", nova_duracao_minutos: int = 0, conta: str = "",
                   agora: datetime | None = None) -> str:
     agora = agora or agora_local()
     hoje = agora.date()
@@ -401,23 +404,26 @@ async def alterar(evento: str, quando: str = "", alcance: str = "", novo_titulo:
                           ["POST", alvo.agenda, nova]]
                 desfazer = [["PATCH", alvo.agenda, mestre["id"], {"recurrence": original}]]  # + apagar a nova (abaixo)
         descricao = "%s: %s" % (onde, "; ".join(mudancas))
-        espera = confirmar(
-            ("alterar", rotulo, alvo.item.get("id"), escolha, novo_titulo, str(novo_dia), str(hora), str(duracao)),
-            resposta_do_usuario, "Posso mudar %s, na conta %s?" % (descricao, rotulo), "agenda_alterar", "mudei")
-        if espera:
-            return espera
-        respostas = await _executar(alvo.conta, passos)
-        if passos[-1][0] == "POST" and isinstance(respostas[-1], dict) and respostas[-1].get("id"):
-            desfazer.append(["DELETE", alvo.agenda, respostas[-1]["id"]])
     except ErroGoogle as erro:
         return "Não consegui mexer na agenda: %s." % erro
-    _guardar(rotulo, "mudou " + descricao, desfazer)
-    return "Mudado na conta %s: %s. Dá para desfazer em até 24 horas." % (rotulo, descricao)
+    conta_alvo, agenda_alvo = alvo.conta, alvo.agenda
+
+    async def executar() -> str:
+        try:
+            respostas = await _executar(conta_alvo, passos)
+        except ErroGoogle as erro:
+            return "Não consegui mudar: %s." % erro
+        if passos[-1][0] == "POST" and isinstance(respostas[-1], dict) and respostas[-1].get("id"):
+            desfazer.append(["DELETE", agenda_alvo, respostas[-1]["id"]])  # a série nova, de "esta e as próximas"
+        _guardar(rotulo, "mudou " + descricao, desfazer)
+        return "Mudado na conta %s: %s. Dá para desfazer em até 24 horas." % (rotulo, descricao)
+
+    return propor("Posso mudar %s, na conta %s?" % (descricao, rotulo), "não mudei " + descricao, executar)
 
 
 # ---------------------------------------------------------------- desfazer
 
-async def desfazer(resposta_do_usuario: str = "", agora: datetime | None = None) -> str:
+async def desfazer(agora: datetime | None = None) -> str:
     mudancas = _ler_lixeira()
     agora_s = relogio_parede.time()
     candidatas = [m for m in mudancas if not m.get("desfeita") and agora_s - float(m.get("quando") or 0)
@@ -426,17 +432,20 @@ async def desfazer(resposta_do_usuario: str = "", agora: datetime | None = None)
         return "Não há nenhuma mudança na agenda das últimas 24 horas para desfazer."
     ultima = candidatas[-1]
     descricao = str(ultima.get("descricao") or "a última mudança")
-    espera = confirmar(("desfazer", ultima.get("quando")), resposta_do_usuario,
-                       "Posso desfazer isto: %s?" % descricao, "agenda_desfazer", "desfiz")
-    if espera:
-        return espera
-    try:
-        contas = google_auth.escolher_contas(str(ultima.get("conta") or ""))
-        await _executar(contas[0], ultima.get("desfazer") or [])
-    except ErroGoogle as erro:
-        return "Não consegui desfazer: %s." % erro
-    ultima["desfeita"] = True
-    config.salvar_json_privado(config.dados() / "agenda-lixeira.json", {"mudancas": mudancas})
-    extra = " Uma ocorrência apagada sozinha volta como evento avulso." if ultima.get("descricao", "").startswith(
-        "apagou") and "só a de" in ultima.get("descricao", "") else ""
-    return "Desfeito: %s.%s" % (maiuscula(descricao), extra)
+
+    async def executar() -> str:
+        try:
+            contas = google_auth.escolher_contas(str(ultima.get("conta") or ""))
+            await _executar(contas[0], ultima.get("desfazer") or [])
+        except ErroGoogle as erro:
+            return "Não consegui desfazer: %s." % erro
+        atuais = _ler_lixeira()  # relida: pode ter mudado desde a proposta
+        for m in atuais:
+            if m.get("quando") == ultima.get("quando"):
+                m["desfeita"] = True
+        config.salvar_json_privado(config.dados() / "agenda-lixeira.json", {"mudancas": atuais})
+        extra = " Uma ocorrência apagada sozinha volta como evento avulso." if descricao.startswith(
+            "apagou") and "só a de" in descricao else ""
+        return "Desfeito: %s.%s" % (maiuscula(descricao), extra)
+
+    return propor("Posso desfazer isto: %s?" % descricao, "não desfiz a última mudança", executar)
