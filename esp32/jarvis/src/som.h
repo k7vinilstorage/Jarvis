@@ -20,6 +20,8 @@ void empurrar(const uint8_t* dados, size_t n);
 void terminarFala();
 void calar();
 bool tocando();
+void mostrarRelatorio();  // no loop: "[áudio] 6.2 s tocados; engasgos: ..." depois de cada fala
+size_t tamanhoBuffer();
 void tocarTom();  // /tom: 440 Hz por 2 s, sem rede
 
 void definirVolume(int volume);

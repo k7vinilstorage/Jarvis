@@ -129,6 +129,14 @@ std::string mensagemSimples(const char* tipo) {
   return serializar(doc);
 }
 
+std::string mensagemConfig(uint32_t saidaTaxa) {
+  JsonDocument doc;
+  doc["tipo"] = "config";
+  doc["saida_taxa"] = saidaTaxa;
+  doc["saida_formato"] = "s16le";
+  return serializar(doc);
+}
+
 std::string mensagemComTexto(const char* tipo, const std::string& texto) {
   std::string limpo = limparUtf8(texto);
   JsonDocument doc;

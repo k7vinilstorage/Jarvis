@@ -36,6 +36,8 @@ const char* nomeDoEstado(Estado e);
 
 // {"tipo": "inicio"}
 std::string mensagemSimples(const char* tipo);
+// {"tipo": "config", "saida_taxa": 16000, "saida_formato": "s16le"}
+std::string mensagemConfig(uint32_t saidaTaxa);
 // {"tipo": "texto", "texto": "..."}; o texto já passa por limparUtf8
 std::string mensagemComTexto(const char* tipo, const std::string& texto);
 

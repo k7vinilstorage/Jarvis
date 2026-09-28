@@ -7,6 +7,7 @@
 
 #include "anel.h"
 #include "config.h"
+#include "fala.h"
 #include "pcm.h"
 
 namespace som {
@@ -21,9 +22,14 @@ I2SClass dac;
 FiltroMic filtro(MIC_DESLOCAMENTO);
 bool micDireito = MIC_CANAL_DIREITO;
 
-// ~1,1 s a 22050 Hz (o resto da folga que a ponte manda espera no TCP). Fica no heap: na memória estática não
-// sobraria espaço para o WiFi.
+// Até ~2 s a 22050 Hz, a folga que a ponte manda à frente (o que não couber espera no TCP). Fica no heap: na
+// memória estática não sobraria espaço para o WiFi.
 Anel* anel = nullptr;
+const size_t RESERVA_WIFI = 90 * 1024;  // o anel só pega memória se sobrar isso para o WiFi e o TCP
+
+ControleDeFala controle;  // só a tarefa do alto-falante mexe
+char relatorio[160];
+std::atomic<bool> temRelatorio{false};
 
 // Combinados entre o loop (rede e botão) e a tarefa do alto-falante
 std::atomic<uint32_t> taxaPedida{0};  // != 0: uma fala está aberta
@@ -64,6 +70,17 @@ void escreverSilencio(uint32_t taxa, uint32_t ms) {
   }
 }
 
+void guardarRelatorio() {
+  const EstatisticasFala& e = controle.estatisticas();
+  int n = snprintf(relatorio, sizeof(relatorio), "[áudio] %.1f s tocados; engasgos: %u", e.msTocados / 1000.0f,
+                   (unsigned)e.engasgos);
+  if (e.engasgos && n > 0 && n < (int)sizeof(relatorio)) {
+    snprintf(relatorio + n, sizeof(relatorio) - n, " (%.2f s ao todo, o maior de %.2f s: a rede não entregou a tempo)",
+             e.msEngasgos / 1000.0f, e.maiorEngasgo / 1000.0f);
+  }
+  temRelatorio = true;
+}
+
 // Só na tarefa do alto-falante. taxaPedida zera por último: quem espera !tocando() acha tudo limpo.
 void encerrar() {
   if (dacAberto) {
@@ -79,52 +96,63 @@ void rodarAltoFalante(void*) {
   static int16_t mono[512];
   static int16_t estereo[1024];
   uint32_t taxa = 0;
+  bool falaAberta = false;
   for (;;) {
     if (calarPedido.load()) {
       encerrar();
+      falaAberta = false;
       calarPedido = false;
       continue;
     }
-    if (!dacAberto) {
-      uint32_t pedida = taxaPedida.load();
-      // Junta uns 100 ms antes de começar, para não engasgar logo no início
-      if (pedida == 0 || (anel->usado() < pedida / 5 && !fimPedido.load())) {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5));
+    uint32_t pedida = taxaPedida.load();
+    if (pedida == 0) {
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5));
+      continue;
+    }
+    if (!falaAberta) {
+      controle.comecar(pedida, FOLGA_AUDIO_MS);
+      falaAberta = true;
+    }
+    bool fim = fimPedido.load();  // lido antes do anel: o que chegou antes do fim já está nele
+    size_t usado = anel->usado();
+    if (!controle.podeTocar(usado, fim, millis())) {
+      if (fim && usado < 2) {  // acabou de verdade
+        if (dacAberto) escreverSilencio(taxa, SILENCIO_FINAL_MS);
+        guardarRelatorio();
+        encerrar();
+        falaAberta = false;
         continue;
       }
+      // Juntando folga (no começo, ou depois de faltar áudio): o DMA toca zeros sozinho enquanto isso
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5));
+      continue;
+    }
+    if (!dacAberto) {
       if (!abrirDac(pedida)) {
         encerrar();
+        falaAberta = false;
         continue;
       }
       taxa = pedida;
     }
-    size_t quero = anel->usado() & ~(size_t)1;
+    size_t quero = usado & ~(size_t)1;
     if (quero > sizeof(mono)) quero = sizeof(mono);
-    if (quero > 0) {
-      size_t n = anel->ler((uint8_t*)mono, quero) / 2;
-      paraEstereo(mono, n, estereo, volumeAtual.load());
-      dac.write((const uint8_t*)estereo, n * 4);
-      continue;
-    }
-    if (fimPedido.load()) {  // lido antes de ver o anel vazio: o que chegou antes do fim já está no anel
-      if (anel->usado() < 2) {
-        escreverSilencio(taxa, SILENCIO_FINAL_MS);
-        encerrar();
-      }
-      continue;
-    }
-    // Faltou áudio no meio (o Hermes ainda está pensando): o DMA toca zeros sozinho até chegar mais
-    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5));
+    size_t n = anel->ler((uint8_t*)mono, quero) / 2;
+    paraEstereo(mono, n, estereo, volumeAtual.load());
+    dac.write((const uint8_t*)estereo, n * 4);
+    controle.tocou(n * 2);
   }
 }
 
 }  // namespace
 
 void comecar() {
-  for (size_t tamanho : {48 * 1024, 32 * 1024, 16 * 1024}) {
+  for (size_t tamanho : {88 * 1024, 64 * 1024, 48 * 1024, 32 * 1024, 16 * 1024}) {
+    if (ESP.getFreeHeap() < tamanho + RESERVA_WIFI || ESP.getMaxAllocHeap() < tamanho) continue;
     uint8_t* memoria = (uint8_t*)malloc(tamanho);
     if (memoria) {
       anel = new Anel(memoria, tamanho);
+      Serial.printf("[áudio] buffer de %u KB (%.1f s a 22050 Hz)\n", (unsigned)(tamanho / 1024), tamanho / 44100.0f);
       break;
     }
   }
@@ -174,6 +202,12 @@ void calar() {
 }
 
 bool tocando() { return taxaPedida.load() != 0 || dacAberto.load(); }
+
+void mostrarRelatorio() {
+  if (temRelatorio.exchange(false)) Serial.println(relatorio);
+}
+
+size_t tamanhoBuffer() { return anel ? anel->usado() + anel->livre() + 1 : 0; }
 
 void tocarTom() {
   const uint32_t taxa = 22050;

@@ -78,6 +78,7 @@ O token e a senha do WiFi ficam gravados na memória da placa. Se ela for perdid
 
 - **Segure o BOOT e fale; solte para mandar.** Cada fala vai até 20 s (`MAX_FALA_S`).
 - **Toque curto no BOOT:** o Jarvis para de falar.
+- **Folga do áudio:** o alto-falante junta 250 ms antes de tocar, e de novo se faltar áudio no meio (`FOLGA_AUDIO_MS` no `config.h`). O buffer guarda até uns 2 s, se a memória deixar (o `/estado` mostra o tamanho).
 - **Falar por cima:** apertar o botão enquanto o Jarvis fala corta a resposta e já começa a ouvir.
 
 O LED mostra o estado:
@@ -120,7 +121,7 @@ No Serial aparecem:
 | `[WiFi] sem conexão` o tempo todo | Nome e senha da rede, rede de 2,4 GHz, sinal onde a placa está (`/estado` mostra o sinal; abaixo de -75 dBm fica ruim). |
 | "Não ouvi nada" ou `microfone quase mudo` | Rode `/mic` e fale perto. Se nenhum canal mostrar sinal, confira VDD, GND, L/R no GND e os pinos 26, 25 e 33. |
 | Sem som na resposta | Rode `/tom`. Se o tom também não tocar, confira a ligação do PCM5102 e o XSMT. |
-| Som picotado | Sinal de WiFi fraco. Veja o `/estado` e aproxime a placa do roteador. |
+| Som picotado | Depois de cada resposta, o Serial mostra `[áudio] 6.2 s tocados; engasgos: N`. Com engasgos, a rede não entregou a tempo: veja o sinal no `/estado`, aproxime a placa do roteador, ou use `SAIDA_TAXA = 16000` no `config.h` (27% menos dados). Com zero engasgos e ainda picotado, o problema é no som (fiação, alimentação do PCM5102): me mande a saída do Serial. |
 | Voz muito baixa ou estourada | `/volume`, e o volume da caixinha. |
 
 ## Testes (no PC, sem placa)

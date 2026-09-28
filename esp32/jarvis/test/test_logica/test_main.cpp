@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "anel.h"
+#include "fala.h"
 #include "led.h"
 #include "mensagens.h"
 #include "pcm.h"
@@ -382,6 +383,8 @@ void test_tipo_do_comeco_de_mensagem_cortada() {
 
 void test_montar_mensagens() {
   TEST_ASSERT_EQUAL_STRING("{\"tipo\":\"inicio\"}", mensagemSimples("inicio").c_str());
+  TEST_ASSERT_EQUAL_STRING("{\"tipo\":\"config\",\"saida_taxa\":16000,\"saida_formato\":\"s16le\"}",
+                           mensagemConfig(16000).c_str());
   TEST_ASSERT_EQUAL_STRING("{\"tipo\":\"texto\",\"texto\":\"diga \\\"olá\\\"\"}",
                            mensagemComTexto("texto", "diga \"olá\"").c_str());
 }
@@ -437,6 +440,52 @@ void test_luz_por_estado() {
   TEST_ASSERT_FALSE(luzAcesa(Luz::PiscaDuplo, 200));
 }
 
+// ---------------------------------------------------------------- quando tocar
+
+void test_fala_espera_a_folga_no_comeco() {
+  ControleDeFala c;
+  c.comecar(22050, 250);  // 250 ms a 22050 Hz, 16 bits = 11024 bytes
+  TEST_ASSERT_FALSE(c.podeTocar(4000, false, 0));
+  TEST_ASSERT_FALSE(c.podeTocar(11000, false, 5));
+  TEST_ASSERT_TRUE(c.podeTocar(11024, false, 10));
+  TEST_ASSERT_TRUE(c.podeTocar(500, false, 20));  // já tocando: qualquer coisa serve
+  TEST_ASSERT_EQUAL(0, c.estatisticas().engasgos);
+}
+
+void test_fala_junta_de_novo_depois_de_uma_falta() {
+  // O defeito: depois de faltar áudio no meio, tocava cada pedacinho que chegava (voz picotada)
+  ControleDeFala c;
+  c.comecar(22050, 250);
+  TEST_ASSERT_TRUE(c.podeTocar(20000, false, 0));
+  TEST_ASSERT_FALSE(c.podeTocar(0, false, 100));     // acabou no meio
+  TEST_ASSERT_FALSE(c.podeTocar(3000, false, 150));  // chegou um pedaço: ainda não
+  TEST_ASSERT_TRUE(c.podeTocar(12000, false, 300));  // juntou a folga
+  TEST_ASSERT_EQUAL(1, c.estatisticas().engasgos);
+  TEST_ASSERT_EQUAL(200, c.estatisticas().msEngasgos);
+  TEST_ASSERT_EQUAL(200, c.estatisticas().maiorEngasgo);
+}
+
+void test_fala_pausa_longa_nao_e_engasgo() {
+  ControleDeFala c;
+  c.comecar(22050, 250);
+  TEST_ASSERT_TRUE(c.podeTocar(20000, false, 0));
+  TEST_ASSERT_FALSE(c.podeTocar(0, false, 1000));  // "Um momento." acabou; o Hermes está pensando
+  TEST_ASSERT_TRUE(c.podeTocar(20000, false, 4000));
+  TEST_ASSERT_EQUAL(1, c.estatisticas().pausas);
+  TEST_ASSERT_EQUAL(0, c.estatisticas().engasgos);
+}
+
+void test_fala_no_fim_toca_o_resto_sem_esperar() {
+  ControleDeFala c;
+  c.comecar(22050, 250);
+  TEST_ASSERT_TRUE(c.podeTocar(100, true, 0));   // frase curtinha: não espera a folga
+  TEST_ASSERT_FALSE(c.podeTocar(0, true, 10));   // acabou de verdade
+  TEST_ASSERT_FALSE(c.podeTocar(1, true, 20));
+  TEST_ASSERT_EQUAL(0, c.estatisticas().engasgos);
+  c.tocou(44100);
+  TEST_ASSERT_EQUAL(1000, c.estatisticas().msTocados);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_anel_escreve_e_le_dando_a_volta);
@@ -465,5 +514,9 @@ int main() {
   RUN_TEST(test_filtro_do_microfone_tira_o_dc_e_limita);
   RUN_TEST(test_para_estereo_com_volume);
   RUN_TEST(test_luz_por_estado);
+  RUN_TEST(test_fala_espera_a_folga_no_comeco);
+  RUN_TEST(test_fala_junta_de_novo_depois_de_uma_falta);
+  RUN_TEST(test_fala_pausa_longa_nao_e_engasgo);
+  RUN_TEST(test_fala_no_fim_toca_o_resto_sem_esperar);
   return UNITY_END();
 }

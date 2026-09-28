@@ -52,6 +52,7 @@ void aoMensagem(const char* json, size_t n, bool cortada) {
     case Tipo::Pronto:
       estadoPonte = Estado::Pronto;
       Serial.printf("[ponte] conectado a %s:%d, sala %s\n", JARVIS_HOST, JARVIS_PORTA, JARVIS_SALA);
+      if (SAIDA_TAXA) rede::enviarTexto(mensagemConfig(SAIDA_TAXA));
       break;
     case Tipo::Estado:
       estadoPonte = ev.estado;
@@ -218,7 +219,8 @@ void tratarLinha(String linha) {
     Serial.printf("[volume %d%%]\n", som::volume());
   } else if (linha == "/estado") {
     rede::mostrarEstado();
-    Serial.printf("Estado da ponte: %s · volume %d%%\n", nomeDoEstado(estadoPonte), som::volume());
+    Serial.printf("Estado da ponte: %s · volume %d%% · buffer de áudio %u KB\n", nomeDoEstado(estadoPonte),
+                  som::volume(), (unsigned)(som::tamanhoBuffer() / 1024));
   } else if (linha == "/falar" || linha.startsWith("/falar ")) {
     String texto = linha.substring(6);
     texto.trim();
@@ -284,5 +286,6 @@ void loop() {
   rede::manter();
   lerSerial();
   atualizarLed();
+  som::mostrarRelatorio();
   if (!gravando) delay(1);
 }
