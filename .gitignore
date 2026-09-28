@@ -8,4 +8,6 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
-esp32/**/segredos.h
+esp32/jarvis/include/segredos.h
+.pio/
+segredos.h

@@ -21,18 +21,18 @@ PC ou ESP32 --WebSocket 10800 (token)--> jarvis-voz --> Whisper (Wyoming, CPU)
 ## Onde estamos e o que vem
 
 1. Fase 0 (fundação) e Fase 1 (cérebro em texto): prontas. Meta atingida: 10 de 10 perguntas da lista do usuário no `scripts/testar-jarvis.py`.
-2. **Agora: Fase 2 (voz).** Ponte entregue, testada só com dublês. Falta:
-   - instalar com `scripts/fase2-voz.sh`;
-   - medir com `scripts/voz-teste.sh` (meta: 1º áudio em até 2 s nas perguntas simples e até 4 s nas com ferramenta);
-   - testar o `scripts/voz-pc.py` no PC.
-3. **Depois: acabamento da Fase 1** (ordem combinada com o usuário):
+2. Fase 2 (voz): instalada no servidor em 25/09. No `medicoes/voz-20260925-2015.md`, o Whisper acertou 100%, mas o "1º áudio" (2,5 a 3,0 s) é o "Um momento."; a resposta começa depois de 3,2 a 3,6 s. Falta:
+   - o `voz-teste.sh` medir o 1º áudio da resposta separado do "Um momento.";
+   - ajustar o Whisper (1,4 a 2,0 s na CPU) e a voz do Piper.
+3. **Agora: Fase 3 (ESP32)**, antecipada pelo usuário em 27/09. O firmware está em `esp32/jarvis/` (PlatformIO, ESP32 clássico, INMP441, PCM5102 em `s16le` na taxa do Piper, BOOT e LED da placa; guia em `esp32/LEIA-ME.md`). Testado no PC (a lógica com `pio test -e nativo`, o código de rede contra a ponte com dublês no `teste-ponte/rodar.sh`) e, em 27/09, na placa: o usuário relatou que funciona. Ainda sem medição dos tempos pela placa.
+4. **Depois: acabamento da Fase 1** (ordem combinada com o usuário):
    - liberar conhecimento geral no SOUL (a regra de precisão vale para os dados dele e fatos atuais);
    - "próximas semanas" = 30 dias;
    - busca com site e data de cada fonte, e dizer quando as fontes discordam;
    - nada de markdown nas respostas;
    - `testes/jarvis-casos.json` mais exigente, para pegar esses casos.
-4. **Por último: Honcho** (memória de longo prazo, `docs/honcho.md`), medindo com e sem ele. Ligar junto o `VOZ_SESSAO_HERMES`.
-5. Fase 3: firmware do ESP32 com o mesmo protocolo (botão, microfone I2S, DAC com `saida_formato u8`, LED pelos estados). Fase 4: wake word, rotinas, barge-in.
+5. **Por último: Honcho** (memória de longo prazo, `docs/honcho.md`), medindo com e sem ele. Ligar junto o `VOZ_SESSAO_HERMES`.
+6. Fase 4: wake word, rotinas, barge-in.
 
 O histórico completo de decisões e medições está em `docs/plano.md`.
 
@@ -72,6 +72,11 @@ docker compose run --rm --no-deps jarvis-voz python -m unittest discover -s test
 # ou, fora do Docker, com Python 3.12 e o requirements.txt de cada pasta:
 cd jarvis-tools && python -m unittest discover -s testes
 cd jarvis-voz && PYTHONPATH=.:testes python -m unittest discover -s testes
+
+# Firmware do ESP32 (no PC, em esp32/jarvis)
+pio test -e nativo                     # lógica, sem placa
+./teste-ponte/rodar.sh                 # rede do firmware contra a ponte com dublês (PYTHON= com as deps do jarvis-voz)
+pio run -t upload && pio device monitor
 ```
 
 ## Jeito de trabalhar

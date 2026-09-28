@@ -1,8 +1,8 @@
 # Jarvis: plano e decisões
 
-Última atualização: 27/09/2026 (migração para o Claude Code local).
+Última atualização: 27/09/2026 (firmware do ESP32).
 
-**Ordem combinada com o usuário:** Fase 2 (voz) → acabamento da Fase 1 (precisão das respostas) → Honcho.
+**Ordem combinada com o usuário:** Fase 2 (voz) → ESP32 (antecipado em 27/09) → acabamento da Fase 1 (precisão das respostas) → Honcho.
 
 ## Situação
 - **Fase 0:** pronta e medida.
@@ -14,9 +14,12 @@
   - inventou um comentário nas provas ("parece um erro no sistema");
   - respondeu "Sim, mas nenhuma" em "atividades para amanhã";
   - saíram listas e negrito em 3 respostas.
-- **Fase 2 (voz):** a ponte `jarvis-voz`, o teste sem microfone e o cliente do PC foram entregues em 25/09 e **ainda não foram instalados**. Foram testados só com Whisper, Piper e Hermes falsos (76 testes). Uma revisão independente achou 15 defeitos; os confirmados foram corrigidos.
+- **Fase 2 (voz):** instalada em 25/09; o usuário relatou em 27/09 que funcionou. No `voz-20260925-2015.md`:
+  - o Whisper acertou 100% das 3 perguntas, em 1,4 a 2,0 s;
+  - o "1º áudio" (2,5 a 3,0 s) é o "Um momento.", porque as 3 perguntas usam ferramenta (até a hora); a resposta começa depois de 3,2 a 3,6 s;
+  - as respostas faladas saíram limpas ("20 e 16", "31 graus"). Na do Moodle, ele ofereceu a lista em vez de ler 9 itens.
 - **Google:** o app ainda está em "Testando", e o login vence em 7 dias. Para publicar, falta a página inicial e a política de privacidade; as páginas estão prontas em `docs/google-paginas/` para o GitHub Pages.
-- **ESP32:** fica para a Fase 3. Veja `esp32/LEIA-ME.md`.
+- **ESP32 (Fase 3):** firmware novo em `esp32/jarvis/` (27/09). Testado no PC (26 testes da lógica e o código de rede contra a ponte com dublês, em 8 cenários) e na placa: em 27/09, o usuário relatou que funciona. Ainda sem medição dos tempos pela placa. Guia em `esp32/LEIA-ME.md`.
 
 ## Hardware e ambiente
 - **Servidor:** Ubuntu Server, tudo em Docker (Portainer), RTX 2060 (6 GB) e 16 GB de RAM. Projeto em `/opt/jarvis`.
@@ -37,6 +40,7 @@
 4. **Voz frase a frase:** a primeira frase sai sozinha; as seguintes são juntadas até uns 60 caracteres.
 5. **GPU só para o modelo:** Whisper, Piper, palavra de ativação e embeddings rodam na CPU. `JARVIS_NUM_GPU=99`, deixando uns 400 MB livres para o Jellyfin.
 6. **Modelo:** `qwen3.5:4b`, com o plano B `qwen3.5:9b`.
+   - Em 27/09, o usuário pediu um modelo mais inteligente. Nenhum maior cabe 100% na GPU de 6 GB com 64K: o `qwen3.5:9b` e o `gemma4:12b` (7,2 GB só o arquivo) iriam em parte para a CPU, e o `gemma4:e4b` (6,1 a 9,6 GB) tem a mesma faixa de inteligência do 4b. Decisão: manter o 4b e atacar os erros no acabamento da Fase 1. Com uma placa de 12 GB, comparar o `qwen3.5:9b` e o `gemma4:12b`.
    - Troca com `scripts/modelo.sh`.
    - Amostragem pelo `.env`: temperatura 0,5, top_p 0,9, top_k 20, presence_penalty 0,3. O padrão do qwen3.5 (1 / 0,95 / 20 / 1,5) inventava mais.
 7. **Busca local:** SearXNG via `jarvis-tools`, com `web.keyless_fallback false`.
@@ -68,12 +72,19 @@
 14. **Ponte de voz `jarvis-voz`:**
     - **Protocolo:** WebSocket em `/voz?token=&sala=`. A entrada é PCM de 16 kHz, mono e 16 bits.
     - **Eventos:** estados, transcrição, ferramenta, frase, `audio_inicio` e `audio_fim` em pares, e `fim` sempre.
-    - **Saída para o ESP32:** `config` com `u8` para o DAC.
+    - **Saída para o ESP32:** o firmware usa o PCM5102 em `s16le`, sem `config`: o áudio vem na taxa do Piper (22050 Hz) e não passa pela reamostragem linear da ponte. O `u8` fica para quem usar o DAC interno.
     - **Envio do áudio:** no ritmo da reprodução, com 2 s de folga.
     - **Trava do Ollama:** só enquanto o Hermes escreve. Um cliente parado por 15 s é derrubado.
     - **Recusas:** 401, 400 e 429. Histórico por sala: 8 mensagens ou 5 min.
     - **Rede:** `JARVIS_VOZ_IP` limita a placa de rede, porque o Docker passa por fora do `ufw`.
     - **Meta:** 1º áudio em até 2 s nas perguntas simples e 4 s com ferramenta.
+15. **Firmware do ESP32** (`esp32/jarvis/`, PlatformIO com o core Arduino 3.x do pioarduino):
+    - **Hardware:** ESP32 clássico, INMP441 no I2S0, PCM5102 no I2S1, BOOT (GPIO0) e o LED da placa (GPIO2).
+    - **Botão:** segurar para falar; um toque de menos de 300 ms só manda parar (`inicio` + `cancelar`). Apertar durante a resposta cala na hora e já grava.
+    - **WebSocket próprio** (`lib/logica/websocket.*`), sem biblioteca: o leitor entrega o áudio em pedaços, direto para um anel de 48 KB (~1,1 s), e só lê do TCP o que cabe. O resto da folga de 2 s da ponte espera no TCP.
+    - **Alto-falante:** tarefa própria, que junta 100 ms antes de tocar e desliga o DAC entre as falas. O DMA toca zeros sozinho nas pausas (`auto_clear`).
+    - **Conexão:** token no cabeçalho `Authorization`, nunca na URL. Reconecta sozinho (1 a 15 s; 60 s depois de um token recusado), manda `ping` a cada 25 s parado e desiste da ponte depois de 70 s sem receber nada.
+    - **Memória:** o anel fica no heap; na memória estática, o WiFi ficaria sem espaço (DRAM estática em 52%).
 
 ## Medições
 
@@ -95,14 +106,14 @@ No vetor de teste de 25/09 às 19h06 (13 ferramentas, ~9,5 mil tokens com ferram
 Na GPU, 5462 de 6144 MiB estão em uso. A geração faz ~64 tokens/s e a leitura do prompt, ~1.750 tokens/s. Há um processo python3 com 188 MiB na GPU que ainda não foi identificado.
 
 ## Pendências
+- **ESP32:** medir pelo Serial (`[tempos]`) e conferir o ganho do microfone com o `/mic`.
 - **Fase 2:**
-  - rodar `scripts/fase2-voz.sh` e ler o `medicoes/voz-*.md`;
-  - testar o `voz-pc.py`;
+  - o `voz-teste.sh` medir o 1º áudio da resposta separado do "Um momento.";
   - ajustar o Whisper (small ou medium) e a voz do Piper.
 - **Acabamento da Fase 1:** os itens da Situação.
 - **Honcho**, por último.
 - Publicar o app Google.
-- **Fase 3:** ESP32. **Fase 4:** palavra de ativação, rotinas, barge-in, Home Assistant e Beszel.
+- **Fase 4:** palavra de ativação, rotinas, barge-in, Home Assistant e Beszel.
 
 ## Perguntas da lista do usuário → casos
 1. Clima (`clima-hoje`, `clima-londrina`)
